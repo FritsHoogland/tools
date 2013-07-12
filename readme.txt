@@ -79,6 +79,5 @@ parms			display values of parameters, including underscore ones if you want
 reclaimable_space	show amounts of reclaimable space
 run_tuning_task		..
 segment_advisor		run segment advisor on a certain segment
-snapper			Tanel Poder's famous snapper
 sql_monitor		run sql_monitor report for a given sid or sid and sql_id (sql_id in the past)
 view_tuning_task	view output of a certain tuning task
