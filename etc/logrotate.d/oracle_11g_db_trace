@@ -1,0 +1,7 @@
+/u01/app/oracle/diag/rdbms/*/*/trace/*.trc /u01/app/oracle/diag/rdbms/*/*/trace/*.trm {
+    weekly
+    rotate 4
+    compress
+    missingok
+    nocreate
+}

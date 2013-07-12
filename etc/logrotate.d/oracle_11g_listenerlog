@@ -1,0 +1,8 @@
+/u01/app/oracle/diag/tnslsnr/*/*/trace/*.log {
+    weekly
+    rotate 4
+    copytruncate
+    compress
+    missingok
+    nocreate
+}

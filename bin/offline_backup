@@ -1,0 +1,71 @@
+#!/bin/bash 
+#
+# Offline backup script.
+#
+# The purpose of this script:
+# - To be run as root
+# - Make OFFLINE backup of all "Y" databases in /etc/oratab
+#   !! This means that databases are going down !!
+# - Delete obsolete backups
+#
+# 14052008 Frits Hoogland
+#
+##############################
+# Variables
+##############################
+#
+# Username of oracle
+ORACLE_OWNER=oracle
+#
+# Oratab
+ORATAB=/etc/oratab
+#
+# Rman repository
+RMAN_REPOSITORY="catalog rman/rman@gc"
+# 
+##############################
+ARGUMENTS="$*"
+if [ $( id -u ) -ne 0 ]; then
+	echo "Error: This script must be run as root"
+	exit 1
+fi
+let RETURN_CODE=0
+if [ -z "$ARGUMENTS" ]; then
+	for LINE in $( cat $ORATAB | grep -v ^# | grep -v ^$ ); do
+		DATABASE=$( echo $LINE | awk -F: '{ print $1 }' )
+		ORAHOME=$( echo $LINE | awk -F: '{ print $2 }' )
+		if [ "$( echo $LINE | awk -F: '{ print $3 }' )" = "Y" ]; then
+			su - $ORACLE_OWNER -c "export ORACLE_SID=$DATABASE; export ORACLE_HOME=$ORAHOME; \$ORACLE_HOME/bin/rman target / $RMAN_REPOSITORY << _END
+shutdown immediate;
+startup mount;
+backup database;
+delete noprompt obsolete;
+alter database open;
+exit;
+_END"
+	 		let RETURN_CODE+=$?
+		else
+			set -f
+			[ ! $DATABASE = "*" ] && echo "Skipped database: $DATABASE"
+			set +f
+		fi
+	done
+else
+	for DATABASE in $ARGUMENTS; do
+		ORAHOME=$( cat $ORATAB | grep -v ^# | grep -v ^$ | grep $DATABASE | awk  -F: '{ print $2 }' )
+		if [ -z "$ORAHOME" ]; then
+			echo "Error: database $DATABASE not found in oratab"
+			exit 1
+		fi
+		su - $ORACLE_OWNER -c "export ORACLE_SID=$DATABASE; export ORACLE_HOME=$ORAHOME; \$ORACLE_HOME/bin/rman target / $RMAN_REPOSITORY << _END
+shutdown immediate;
+startup mount;
+backup database;
+delete noprompt obsolete;
+alter database open;
+exit;
+_END"
+		let RETURN_CODE+=$?
+	done
+fi
+exit $RETURN_CODE

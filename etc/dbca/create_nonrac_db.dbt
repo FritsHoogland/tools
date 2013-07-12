@@ -1,0 +1,265 @@
+<DatabaseTemplate name="dbm_template" description="Template from RAC database delivered with database machine" version="11.1.0.0.0">
+   <CommonAttributes>
+      <option name="OMS" value="false"/>
+      <option name="JSERVER" value="false"/>
+      <option name="SPATIAL" value="false"/>
+      <option name="IMEDIA" value="false"/>
+      <option name="XDB_PROTOCOLS" value="false"/>
+      <option name="ORACLE_TEXT" value="false"/>
+      <option name="SAMPLE_SCHEMA" value="false"/>
+      <option name="CWMLITE" value="false"/>
+      <option name="EM_REPOSITORY" value="false"/>
+      <option name="APEX" value="false"/>
+      <option name="OWB" value="false"/>
+      <option name="DV" value="false"/>
+   </CommonAttributes>
+   <Variables/>
+   <CustomScripts Execute="false"/>
+   <InitParamAttributes>
+      <InitParams>
+         <initParam name="cluster_database" value="FALSE"/>
+         <initParam name="nls_language" value="AMERICAN"/>
+         <initParam name="nls_territory" value="AMERICA"/>
+         <initParam name="use_large_pages" value="ONLY"/>
+         <initParam name="db_create_file_dest" value="+DATA"/>
+         <initParam name="db_name" value=""/>
+         <initParam name="db_domain" value=""/>
+         <initParam name="os_authent_prefix" value=""/>
+         <initParam name="audit_file_dest" value="/u01/app/oracle/admin/{DB_UNIQUE_NAME}/adump"/>
+         <initParam name="remote_login_passwordfile" value="EXCLUSIVE"/>
+         <initParam name="db_block_checking" value="OFF"/>
+         <initParam name="parallel_min_servers" value="32"/>
+         <initParam name="sql92_security" value="TRUE"/>
+         <initParam name="log_buffer" value="134217728"/>
+         <initParam name="db_block_checksum" value="typical"/>
+         <initParam name="parallel_adaptive_multi_user" value="FALSE"/>
+         <initParam name="parallel_threads_per_cpu" value="1"/>
+         <initParam name="control_files" value=""/>
+         <initParam name="diagnostic_dest" value="/u01/app/oracle"/>
+         <initParam name="pre_page_sga" value="FALSE"/>
+         <initParam name="db_recovery_file_dest" value="+RECO"/>
+         <initParam name="parallel_max_servers" value="128"/>
+         <initParam name="audit_trail" value="DB"/>
+         <initParam name="fast_start_mttr_target" value="60"/>
+         <initParam name="audit_sys_operations" value="TRUE"/>
+         <initParam name="db_files" value="200"/>
+         <initParam name="log_archive_format" value="%t_%s_%r.dbf"/>
+         <initParam name="db_block_size" value="8192"/>
+         <initParam name="recyclebin" value="OFF"/>
+         <initParam name="open_cursors" value="1000"/>
+         <initParam name="global_names" value="TRUE"/>
+         <initParam name="db_recovery_file_dest_size" value="4718592000000"/>
+         <initParam name="parallel_execution_message_size" value="16384"/>
+         <initParam name="undo_tablespace" value="UNDOTBS1"/>
+         <initParam name="_kill_diagnostics_timeout" value="140"/>
+         <initParam name="_lm_rcvr_hang_allow_time" value="140"/>
+	 <initParam name="_file_size_increase_increment" value="2044" unit="MB"/>
+         <initParam name="compatible" value="11.2.0.1"/>
+         <initParam name="pga_aggregate_target" value="500" unit="MB"/>
+         <initParam name="processes" value="100"/>
+         <initParam name="sga_target" value="2000" unit="MB"/>
+      </InitParams>
+      <MiscParams>
+         <characterSet>WE8MSWIN1252</characterSet>
+         <nationalCharacterSet>AL16UTF16</nationalCharacterSet>
+         <archiveLogMode>false</archiveLogMode>
+         <initParamFileName>{ORACLE_BASE}/admin/{DB_UNIQUE_NAME}/pfile/init.ora</initParamFileName>
+      </MiscParams>
+      <SPfile useSPFile="true">+DATA/{DB_UNIQUE_NAME}/spfile{SID}.ora</SPfile>
+   </InitParamAttributes>
+   <StorageAttributes>
+      <ControlfileAttributes id="Controlfile">
+         <maxDatafiles>100</maxDatafiles>
+         <maxLogfiles>16</maxLogfiles>
+         <maxLogMembers>3</maxLogMembers>
+         <maxLogHistory>1</maxLogHistory>
+         <maxInstances>8</maxInstances>
+         <image name="current.256.726598287" filepath="+DATA"/>
+         <image name="current.256.726598287" filepath="+RECO"/>
+      </ControlfileAttributes>
+      <DatafileAttributes id="+DATA">
+         <tablespace>SYSAUX</tablespace>
+         <temporary>false</temporary>
+         <online>true</online>
+         <status>0</status>
+         <size unit="MB">16384</size>
+         <reuse>true</reuse>
+         <autoExtend>true</autoExtend>
+         <increment unit="MB">4096</increment>
+         <maxSize unit="MB">32767</maxSize>
+      </DatafileAttributes>
+      <DatafileAttributes id="+DATA">
+         <tablespace>SYSTEM</tablespace>
+         <temporary>false</temporary>
+         <online>true</online>
+         <status>0</status>
+         <size unit="MB">16384</size>
+         <reuse>true</reuse>
+         <autoExtend>true</autoExtend>
+         <increment unit="MB">4096</increment>
+         <maxSize unit="MB">32767</maxSize>
+      </DatafileAttributes>
+      <DatafileAttributes id="+DATA">
+         <tablespace>UNDOTBS1</tablespace>
+         <temporary>false</temporary>
+         <online>true</online>
+         <status>0</status>
+         <size unit="MB">16384</size>
+         <reuse>true</reuse>
+         <autoExtend>true</autoExtend>
+         <increment unit="MB">4096</increment>
+         <maxSize unit="MB">32767</maxSize>
+      </DatafileAttributes>
+      <DatafileAttributes id="+DATA">
+         <tablespace>TEMP</tablespace>
+         <temporary>true</temporary>
+         <online>true</online>
+         <status>0</status>
+         <size unit="MB">32767</size>
+         <reuse>true</reuse>
+         <autoExtend>true</autoExtend>
+         <increment unit="MB">500</increment>
+         <maxSize unit="MB">32767</maxSize>
+      </DatafileAttributes>
+      <TablespaceAttributes id="SYSAUX">
+         <online>true</online>
+         <offlineMode>1</offlineMode>
+         <readOnly>false</readOnly>
+         <temporary>false</temporary>
+         <defaultTemp>false</defaultTemp>
+         <undo>false</undo>
+         <local>true</local>
+         <blockSize>8192</blockSize>
+         <allocation>1</allocation>
+         <uniAllocSize unit="KB">-1</uniAllocSize>
+         <initSize unit="KB">64</initSize>
+         <increment unit="KB">0</increment>
+         <incrementPercent>0</incrementPercent>
+         <minExtends>1</minExtends>
+         <maxExtends>2147483645</maxExtends>
+         <minExtendsSize unit="KB">64</minExtendsSize>
+         <logging>true</logging>
+         <recoverable>false</recoverable>
+         <maxFreeSpace>0</maxFreeSpace>
+         <autoSegmentMgmt>true</autoSegmentMgmt>
+         <bigfile>true</bigfile>
+         <datafilesList>
+            <TablespaceDatafileAttributes id="+DATA">
+               <id>-1</id>
+            </TablespaceDatafileAttributes>
+         </datafilesList>
+      </TablespaceAttributes>
+      <TablespaceAttributes id="SYSTEM">
+         <online>true</online>
+         <offlineMode>1</offlineMode>
+         <readOnly>false</readOnly>
+         <temporary>false</temporary>
+         <defaultTemp>false</defaultTemp>
+         <undo>false</undo>
+         <local>true</local>
+         <blockSize>8192</blockSize>
+         <allocation>1</allocation>
+         <uniAllocSize unit="KB">-1</uniAllocSize>
+         <initSize unit="KB">64</initSize>
+         <increment unit="KB">0</increment>
+         <incrementPercent>0</incrementPercent>
+         <minExtends>1</minExtends>
+         <maxExtends>2147483645</maxExtends>
+         <minExtendsSize unit="KB">64</minExtendsSize>
+         <logging>true</logging>
+         <recoverable>false</recoverable>
+         <maxFreeSpace>0</maxFreeSpace>
+         <autoSegmentMgmt>false</autoSegmentMgmt>
+         <bigfile>true</bigfile>
+         <datafilesList>
+            <TablespaceDatafileAttributes id="+DATA">
+               <id>-1</id>
+            </TablespaceDatafileAttributes>
+         </datafilesList>
+      </TablespaceAttributes>
+      <TablespaceAttributes id="TEMP">
+         <online>true</online>
+         <offlineMode>1</offlineMode>
+         <readOnly>false</readOnly>
+         <temporary>true</temporary>
+         <defaultTemp>true</defaultTemp>
+         <undo>false</undo>
+         <local>true</local>
+         <blockSize>8192</blockSize>
+         <allocation>2</allocation>
+         <uniAllocSize unit="KB">1024</uniAllocSize>
+         <initSize unit="KB">1024</initSize>
+         <increment unit="KB">1024</increment>
+         <incrementPercent>0</incrementPercent>
+         <minExtends>1</minExtends>
+         <maxExtends>-1</maxExtends>
+         <minExtendsSize unit="KB">1024</minExtendsSize>
+         <logging>false</logging>
+         <recoverable>false</recoverable>
+         <maxFreeSpace>0</maxFreeSpace>
+         <autoSegmentMgmt>false</autoSegmentMgmt>
+         <bigfile>true</bigfile>
+         <datafilesList>
+            <TablespaceDatafileAttributes id="+DATA">
+               <id>-1</id>
+            </TablespaceDatafileAttributes>
+         </datafilesList>
+      </TablespaceAttributes>
+      <TablespaceAttributes id="UNDOTBS1">
+         <online>true</online>
+         <offlineMode>1</offlineMode>
+         <readOnly>false</readOnly>
+         <temporary>false</temporary>
+         <defaultTemp>false</defaultTemp>
+         <undo>true</undo>
+         <local>true</local>
+         <blockSize>8192</blockSize>
+         <allocation>1</allocation>
+         <uniAllocSize unit="KB">-1</uniAllocSize>
+         <initSize unit="KB">64</initSize>
+         <increment unit="KB">0</increment>
+         <incrementPercent>0</incrementPercent>
+         <minExtends>1</minExtends>
+         <maxExtends>2147483645</maxExtends>
+         <minExtendsSize unit="KB">64</minExtendsSize>
+         <logging>true</logging>
+         <recoverable>false</recoverable>
+         <maxFreeSpace>0</maxFreeSpace>
+         <autoSegmentMgmt>false</autoSegmentMgmt>
+         <bigfile>true</bigfile>
+         <datafilesList>
+            <TablespaceDatafileAttributes id="+DATA">
+               <id>-1</id>
+            </TablespaceDatafileAttributes>
+         </datafilesList>
+      </TablespaceAttributes>
+      <RedoLogGroupAttributes id="1">
+         <reuse>false</reuse>
+         <fileSize unit="KB">4194304</fileSize>
+         <Thread>1</Thread>
+         <member ordinal="0" memberName="OMF_1_REDOLOG_MEMBER_0" filepath="+DATA"/>
+         <member ordinal="1" memberName="OMF_1_REDOLOG_MEMBER_1" filepath="+RECO"/>
+      </RedoLogGroupAttributes>
+      <RedoLogGroupAttributes id="2">
+         <reuse>false</reuse>
+         <fileSize unit="KB">4194304</fileSize>
+         <Thread>1</Thread>
+         <member ordinal="0" memberName="OMF_2_REDOLOG_MEMBER_0" filepath="+DATA"/>
+         <member ordinal="1" memberName="OMF_2_REDOLOG_MEMBER_1" filepath="+RECO"/>
+      </RedoLogGroupAttributes>
+      <RedoLogGroupAttributes id="3">
+         <reuse>false</reuse>
+         <fileSize unit="KB">4194304</fileSize>
+         <Thread>1</Thread>
+         <member ordinal="0" memberName="OMF_3_REDOLOG_MEMBER_0" filepath="+DATA"/>
+         <member ordinal="1" memberName="OMF_3_REDOLOG_MEMBER_1" filepath="+RECO"/>
+      </RedoLogGroupAttributes>
+      <RedoLogGroupAttributes id="4">
+         <reuse>false</reuse>
+         <fileSize unit="KB">4194304</fileSize>
+         <Thread>1</Thread>
+         <member ordinal="0" memberName="OMF_4_REDOLOG_MEMBER_0" filepath="+DATA"/>
+         <member ordinal="1" memberName="OMF_4_REDOLOG_MEMBER_1" filepath="+RECO"/>
+      </RedoLogGroupAttributes>
+   </StorageAttributes>
+</DatabaseTemplate>

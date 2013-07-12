@@ -1,0 +1,13 @@
+#!/bin/bash
+[ "$USER" != "oracle" ] && echo "Error: $0 should be executed with userid oracle." && exit 1
+[ "${ORACLE_SID:0:4}" != "+ASM" ] && echo "Error: grid home should be set." && exit 1
+sqlplus / as sysasm << _EOF
+alter system set processes=1250 sid='*' scope=spfile;
+alter system set sga_target=1250M sid='*' scope=spfile;
+alter system set pga_aggregate_target=400M sid='*' scope=spfile;
+alter system set memory_target=0 sid='*' scope=spfile;
+alter system set memory_max_target=0 sid='*' scope=spfile;
+alter system reset memory_max_target sid='*' scope=spfile;
+alter system set use_large_pages=true sid='*' scope=spfile;
+exit;
+_EOF

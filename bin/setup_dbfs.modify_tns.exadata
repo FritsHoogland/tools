@@ -1,0 +1,3 @@
+ORAHOME=REPLACEME
+ORASIDNR=$(hostname -s | sed 's/.*\(..\)$/\1/' | sed 's/^0//')
+cat /tmp/tnsnames.ora.template | sed "s#XXORAHOMEXX#$ORAHOME#" | sed "s/XXNRXX/$ORASIDNR/" > /home/oracle/dbfs/tnsadmin/tnsnames.ora

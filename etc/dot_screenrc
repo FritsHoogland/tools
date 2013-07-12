@@ -1,0 +1,2 @@
+shell -$SHELL
+hardstatus alwayslastline "%{= RY}%H %{kG}%{G} Screen(s): %{c}%w %=%{kG}%c %D, %M %d %Y "

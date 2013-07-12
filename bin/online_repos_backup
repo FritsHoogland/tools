@@ -1,0 +1,49 @@
+#!/bin/bash 
+#
+# Online RMAN REPOSITORY backup script.
+#
+# The purpose of this script:
+# - To be run as root
+# - Make ONLINE backup of RMAN repository
+# - Delete obsolete backups
+#
+# The only difference with this script is there's no repository connection
+# made during the backup.
+#
+# 14052008 Frits Hoogland
+#
+##############################
+# Variables
+##############################
+#
+# Username of oracle
+ORACLE_OWNER=oracle
+#
+# Oratab
+ORATAB=/etc/oratab
+#
+##############################
+ARGUMENTS="$*"
+if [ ! $# -eq 1 ]; then
+	echo "Error: This script requires ONE argument, the SID of the RMAN repository"
+	exit 1
+fi
+if [ $( id -u ) -ne 0 ]; then
+	echo "Error: This script must be run as root"
+	exit 1
+fi
+let RETURN_CODE=0
+for DATABASE in $ARGUMENTS; do
+	ORAHOME=$( cat $ORATAB | grep -v ^# | grep -v ^$ | grep $DATABASE | awk  -F: '{ print $2 }' )
+	if [ -z "$ORAHOME" ]; then
+		echo "Error: database $DATABASE not found in oratab"
+		exit 1
+	fi
+	su - $ORACLE_OWNER -c "export ORACLE_SID=$DATABASE; export ORACLE_HOME=$ORAHOME; \$ORACLE_HOME/bin/rman target / << _END
+backup database plus archivelog;
+delete noprompt obsolete;
+exit;
+_END"
+	let RETURN_CODE+=$?
+done
+exit $RETURN_CODE

@@ -1,0 +1,69 @@
+#!/usr/bin/bash
+#
+# Xvfb.aix	stop and start script for X virtual framebuffer server
+#
+# description: This script starts and stops X virtual framebuffer server
+#
+# works for: AIX
+#
+# Activate by linking this script in appropriate runlevel directory:
+# (as root)
+# cp /path/to/tools/bin/Xvfb.aix /etc
+# ln -s /etc/Xvfb.aix /etc/rc.d/rc2.d/S50Xvfb.aix
+# ln -s /etc/Xvfb.aix /etc/rc.d/rc2.d/K50Xvfb.aix
+#
+# Frits Hoogland
+# -version control
+# 23042009 FH Creation
+########################################
+# Please set the following variables ! #
+########################################
+#
+# XVFB_USER - which user is used for running Xvfb?
+XVFB_USER=nobody
+#
+# XVFB_DISPLAY - display number Xvfb uses
+XVFB_DISPLAY="-n :99"
+#
+# XVFB - the Xvfb executable
+XVFB="/usr/bin/X11/X -force -x abx -x dbe -x GLX"
+#
+#############################################
+# Do not modify anything beyond this line ! #
+#############################################
+PATH=/usr/bin:/etc:/usr/sbin:/usr/ucb:/usr/bin/X11:/sbin
+
+start() {
+	echo -n $"Starting Xvfb: "
+	su $XVFB_USER -c "$XVFB $XVFB_DISPLAY 2>&1 > /dev/null &"
+	RETVAL=$?
+	echo
+	return $RETVAL
+}
+stop() {
+	echo -n $"Stopping Xvfb: "
+	[ ! -z "$( ps -ef | grep "$XVFB" | grep -v grep | awk '{ print $2 }' )" ] && kill -9 $( ps -ef | grep "$XVFB $XVFB_DISPLAY" | grep -v grep | awk '{ print $2 }' )
+	RETVAL=$?
+	echo
+	return $RETVAL
+}
+restart() {
+	stop
+	start
+}
+
+case "$1" in
+	start)
+		start
+		;;
+	stop)
+		stop
+		;;
+	restart)
+		restart
+		;;
+	*)
+		echo $"Usage: $0 {start|stop|restart}"
+		exit 1
+		;;
+esac

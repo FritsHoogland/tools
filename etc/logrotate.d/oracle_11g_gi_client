@@ -1,0 +1,7 @@
+/u01/app/*/grid/log/*/client/*.log {
+    weekly
+    rotate 4
+    compress
+    missingok
+    nocreate
+}

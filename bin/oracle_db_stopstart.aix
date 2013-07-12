@@ -1,0 +1,69 @@
+#!/usr/bin/bash
+#
+# Stop and start script for the oracle databases and listener
+#
+# works for: AIX
+#
+# Activate by linking this script in appropriate runlevel directory:
+# (as root)
+# cp /path/to/tools/bin/oracle_db_stopstart.aix /etc
+# ln -s /etc/oracle_db_stopstart.aix /etc/rc.d/rc2.d/S99oracle_db_stopstart.aix
+# ln -s /etc/oracle_db_stopstart.aix /etc/rc.d/rc2.d/K01oracle_db_stopstart.aix
+#
+# WARNING! Only works for NON PASSWORD protected listener!
+#
+# Frits Hoogland
+# -version control
+# 26032009 FH Creation
+########################################
+# Please set the following variables ! #
+########################################
+#
+# ORACLE_HOME - use highest version
+ORACLE_HOME=/ora0/app/ora102
+#
+# ORACLE_USER - user with which the database is installed; default 'oracle'
+ORACLE_USER=oracle
+#
+# ORACLE_HOME_LISTENER - start listener from this home, leave blank if listener is not to be started with this script; default ORACLE_HOME
+ORACLE_HOME_LISTENER=$ORACLE_HOME
+#
+#############################################
+# Do not modify anything beyond this line ! #
+#############################################
+PATH=/usr/bin:/etc:/usr/sbin:/usr/ucb:/usr/bin/X11:/sbin
+
+start() {
+	echo -n $"Starting oracle databases: "
+	su - $ORACLE_USER -c "export ORACLE_HOME=$ORACLE_HOME; $ORACLE_HOME/bin/dbstart $ORACLE_HOME_LISTENER"
+	RETVAL=$?
+	echo
+	return $RETVAL
+}
+stop() {
+	echo -n $"Stopping oracle databases: "
+	su - $ORACLE_USER -c "export ORACLE_HOME=$ORACLE_HOME; $ORACLE_HOME/bin/dbshut $ORACLE_HOME_LISTENER"
+	RETVAL=$?
+	echo
+	return $RETVAL
+}
+restart() {
+	stop
+	start
+}
+
+case "$1" in
+	start)
+		start
+		;;
+	stop)
+		stop
+		;;
+	restart)
+		restart
+		;;
+	*)
+		echo $"Usage: $0 {start|stop|restart}"
+		exit 1
+		;;
+esac

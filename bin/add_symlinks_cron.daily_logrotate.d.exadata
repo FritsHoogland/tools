@@ -1,0 +1,30 @@
+#!/bin/bash
+##
+# add_symlinks_cron.daily_logrotate.d.exadata
+# 
+# Description: This is a simple script that adds symlinks in /etc/cron.daily and /etc/logrotate.d for cleaning up oracle logs and traces.
+#              This script is created for Oracle Exadata Database/Computing layer systems, and possibly works on other OL/RHEL systems too.
+#
+# 19092011 Frits Hoogland
+
+if [ ! $( id -u ) -eq 0 ]; then
+	echo "This script should be run as root."
+	exit 1
+fi
+
+# set default permissions to /etc/cron.daily
+# (unpublished bug in some exadata computing node images)
+chmod -R 755 /etc/cron.hourly
+chmod -R 755 /etc/cron.daily
+chmod -R 755 /etc/cron.weekly
+chmod -R 755 /etc/cron.monthly
+
+# symlink tmpwatch & logrotate scripts
+ln -s /u01/tools/etc/cron.daily/oracle_asm_audit_tmpwatch /etc/cron.daily/oracle_asm_audit_tmpwatch
+ln -s /u01/tools/etc/cron.daily/oracle_database_audit_tmpwatch /etc/cron.daily/oracle_database_audit_tmpwatch
+ln -s /u01/tools/etc/logrotate.d/oracle_11g_alertlog /etc/logrotate.d/oracle_11g_alertlog
+ln -s /u01/tools/etc/logrotate.d/oracle_11g_listenerlog /etc/logrotate.d/oracle_11g_listenerlog
+ln -s /u01/tools/etc/logrotate.d/oracle_11g_scanlistenerlog /etc/logrotate.d/oracle_11g_scanlistenerlog
+ln -s /u01/tools/etc/logrotate.d/oracle_11g_asm_trace /etc/logrotate.d/oracle_11g_asm_trace
+ln -s /u01/tools/etc/logrotate.d/oracle_11g_db_trace /etc/logrotate.d/oracle_11g_db_trace
+ln -s /u01/tools/etc/logrotate.d/oracle_11g_gi_client /etc/logrotate.d/oracle_11g_gi_client

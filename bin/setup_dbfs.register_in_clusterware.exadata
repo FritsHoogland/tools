@@ -1,0 +1,14 @@
+ACTION_SCRIPT=XXGRIDHOMEXX/crs/script/mount-dbfs.sh
+RESNAME=dbfs_mount
+DBNAME=dbfs
+DBNAMEL=`echo $DBNAME | tr A-Z a-z`
+ORACLE_HOME=XXGRIDHOMEXX
+PATH=$ORACLE_HOME/bin:$PATH
+export PATH ORACLE_HOME
+crsctl add resource $RESNAME \
+  -type local_resource \
+  -attr "ACTION_SCRIPT=$ACTION_SCRIPT, \
+         CHECK_INTERVAL=30,RESTART_ATTEMPTS=10, \
+         START_DEPENDENCIES='hard(ora.$DBNAMEL.db)pullup(ora.$DBNAMEL.db)',\
+         STOP_DEPENDENCIES='hard(ora.$DBNAMEL.db)',\
+         SCRIPT_TIMEOUT=300"

@@ -1,0 +1,370 @@
+#!/bin/bash
+
+### This script is from Note 1054431.1, ensure you have the latest version
+### Note 1054431.1 provides information about the setup required to use this script
+
+### updated 26-JUL-2012
+
+###########################################
+### Everyone must set these values
+###########################################
+### Database name for the DBFS repository as used in "srvctl status database -d $DBNAME"
+DBNAME=dbfs
+
+### Mount point where DBFS should be mounted 
+MOUNT_POINT=/mnt/dbfs
+
+### Username of the DBFS repository owner in database $DBNAME
+DBFS_USER=dbfs
+
+### RDBMS ORACLE_HOME directory path
+ORACLE_HOME=XXORAHOMEXX
+
+### Syslog facility name (default user)
+### Changed default from local3 to user for Solaris default support on 17-FEB-2012
+### This will allow us to log messages to the syslog 
+###  (/var/log/messages on Linux, /var/adm/messages on Solaris)
+LOGGER_FACILITY=user
+
+### mount options for dbfs_client; these are used for both wallet and non-wallet mounting
+MOUNT_OPTIONS=allow_other,direct_io
+### if tracing is required, maybe consider parameter like the example below
+### following example is commented out, only uncomment if directed by Oracle Support
+### fix_control=32 added per bug 13340960 to allow async statfs response
+#MOUNT_OPTIONS=allow_other,direct_io,fix_control=32,trace_level=1,trace_file=/tmp/dbfs_client_trace.$$.log,trace_size=100
+
+### PERL_ALARM_TIMEOUT is number of seconds to wait for response from status command.
+### After this, if no respnose, the script will run clean.
+### NOTE: If this is longer than the clusterware check interval, bad things may happen.
+###       Adjust the CHECK_INTERVAL to ensure it is at least 2x as long as PERL_ALARM_TIMEOUT.
+###       Example:
+###       $ crsctl status res dbfs_mount -p|grep ^CHECK      
+###       CHECK_INTERVAL=30
+###       $ crsctl modify res dbfs_mount -attr "CHECK_INTERVAL=32"
+###       $ crsctl status res dbfs_mount -p|grep ^CHECK
+###       CHECK_INTERVAL=32
+PERL_ALARM_TIMEOUT=14
+
+###########################################
+### If using password-based authentication, set these
+###########################################
+### This is the plain text password for the DBFS_USER user
+DBFS_PASSWD=dbfs
+
+### The file used to temporarily store the DBFS_PASSWD so dbfs_client can read it
+### This file is removed immediately after it is read by dbfs_client
+### The actual filename used will have the PID appended to the name for uniqueness
+### This variable should be a full pathname including a directory and the first part of a filename.
+DBFS_PWDFILE_BASE=/tmp/.dbfs-passwd.txt
+
+###########################################
+### If using wallet-based authentication, modify these
+###########################################
+### WALLET should be true if using a wallet, otherwise, false
+WALLET=false
+
+### TNS_ADMIN is the directory containing tnsnames.ora and sqlnet.ora used by DBFS
+TNS_ADMIN=/home/oracle/dbfs/tnsadmin
+
+### TNS alias used for mounting with wallets
+DBFS_LOCAL_TNSALIAS=dbfs.local
+
+###########################################
+### No editing is required below this point
+###########################################
+### determine platform
+UNAME_S=`uname -s`
+if   [ $UNAME_S = 'Linux' ]; then LINUX=1; SOLARIS=0; 
+elif [ $UNAME_S = 'SunOS' ]; then LINUX=0; SOLARIS=1; 
+fi
+
+GREP=/bin/grep
+AWK=/bin/awk
+ECHO=/bin/echo
+LOGGER="/bin/logger -t DBFS_${MOUNT_POINT}"
+RMF='/bin/rm -f'
+TOUCH=/bin/touch
+CHMOD=/bin/chmod
+PS=/bin/ps
+SLEEP=/bin/sleep
+KILL=/bin/kill
+BASENAME=/bin/basename
+STAT=/usr/bin/stat
+ID=/usr/bin/id
+WC=/usr/bin/wc
+SRVCTL=$ORACLE_HOME/bin/srvctl
+DBFS_CLIENT=$ORACLE_HOME/bin/dbfs_client
+HN=/bin/hostname
+PERL=/usr/bin/perl
+MOUNT=/bin/mount
+### ensure messages are displayed in English for pattern matching
+LANG=en_US.UTF-8
+NLS_LANG=American_America.US7ASCII
+
+if [ -z "$STATUS_TIMEOUT" ]; then STATUS_TIMEOUT=0; fi
+
+if [ $LINUX -eq 1 ]; then
+  MOUNT=/bin/mount
+  XARGS='/usr/bin/xargs -r'
+  FUSERMOUNT=/bin/fusermount
+  LD_LIBRARY_PATH=$ORACLE_HOME/lib:/lib64
+elif [ $SOLARIS -eq 1 ]; then
+  MOUNT=/sbin/mount
+  XARGS=/usr/bin/xargs
+  UMOUNT=/usr/sbin/umount
+  LD_LIBRARY_PATH=$ORACLE_HOME/lib:$ORACLE_HOME/rdbms/lib:/usr/lib:/lib
+fi
+
+DBFS_PWDFILE=$DBFS_PWDFILE_BASE.$$
+
+export ORACLE_HOME LD_LIBRARY_PATH TNS_ADMIN
+export STAT MOUNT_POINT PERL_ALARM_TIMEOUT SOLARIS LINUX
+export PATH=$ORACLE_HOME/bin:$PATH
+export STATUS_TIMEOUT
+export LANG NLS_LANG
+
+logit () {
+  ### type: info, error, debug
+  type=$1
+  msg=$2
+  if [ "$type" = "info" ]; then
+    $ECHO $msg
+    $LOGGER -p ${LOGGER_FACILITY}.info "$msg"
+  elif [ "$type" = "error" ]; then
+    $ECHO $msg
+    $LOGGER -p ${LOGGER_FACILITY}.error "$msg"
+  elif [ "$type" = "debug" ]; then
+    $ECHO $msg
+    $LOGGER -p ${LOGGER_FACILITY}.debug "$msg"
+  fi
+}
+
+### must not be root
+if [ `$ID -u` -eq 0 ]; then
+  logit error "Run this as the Oracle software owner, not root"
+  exit 1
+fi
+
+### determine how we were called, derive location
+SCRIPTPATH=$0
+SCRIPTNAME=`$BASENAME $SCRIPTPATH`
+
+echo $SCRIPTPATH | grep ^/ > /dev/null 2>&1
+if [ $? -ne 0 ]; then 
+  MYDIR=`pwd`
+  SCRIPTPATH=${MYDIR}/${SCRIPTPATH}
+fi
+
+### must cd to a directory where the oracle owner can get CWD
+cd /tmp
+
+case "$1" in
+'start')
+  logit info "$SCRIPTNAME mounting DBFS at $MOUNT_POINT from database $DBNAME"
+
+  ### check to see if it is already mounted
+  $SCRIPTPATH status > /dev/null 2>&1
+  if [ $? -eq 0 ]; then
+    logit error "$MOUNT_POINT already mounted, use $SCRIPTNAME stop before attempting to start"
+    $SCRIPTPATH status
+    exit 1
+  fi
+
+  ### set the ORACLE_SID dynamically based on OCR info, if it is running
+  export ORACLE_SID=$($SRVCTL status instance -d $DBNAME -n `$HN` | \
+                      $GREP 'is running' | $AWK '{print $2}' )
+  logit info "ORACLE_SID is $ORACLE_SID"
+
+  ### if there's no SID defined locally or it isn't running, stop
+  if [ -z "$ORACLE_SID" -a "$WALLET" = 'false' ]; then
+    logit error "No running ORACLE_SID available on this host, exiting"
+    exit 2
+  fi
+
+  ### if using password-based startup, use this
+  if [ "$WALLET" = 'false' -a -n "$DBFS_PASSWD" ]; then
+    $RMF $DBFS_PWDFILE
+    if [ -f $DBFS_PWDFILE ]; then 
+      logit error "please remove $DBFS_PWDFILE and try again"
+      exit 1
+    fi 
+
+    $TOUCH $DBFS_PWDFILE
+    $CHMOD 600 $DBFS_PWDFILE
+    $ECHO $DBFS_PASSWD > $DBFS_PWDFILE
+
+    logit info "spawning dbfs_client command using SID $ORACLE_SID"
+
+    (nohup $DBFS_CLIENT ${DBFS_USER}@ -o $MOUNT_OPTIONS \
+          $MOUNT_POINT < $DBFS_PWDFILE | $LOGGER -p ${LOGGER_FACILITY}.info 2>&1 & ) &
+
+    $RMF $DBFS_PWDFILE
+
+  elif [ "$WALLET" = true ]; then
+    logit info "doing mount $MOUNT_POINT using SID $ORACLE_SID with wallet now"
+    (nohup $DBFS_CLIENT /@${DBFS_LOCAL_TNSALIAS} -o $MOUNT_OPTIONS,wallet \
+          $MOUNT_POINT | $LOGGER -p ${LOGGER_FACILITY}.info 2>&1 & ) &
+  fi
+
+  ### allow time for the mount table update before checking it
+  $SLEEP 1
+  ### set return code based on success of mounting
+  $SCRIPTPATH status > /dev/null 2>&1
+  if [ $? -eq 0 ]; then
+    logit info "Start -- ONLINE"
+    exit 0
+  else
+    logit info "Start -- OFFLINE"
+    exit 1
+  fi
+  ;;
+'stop')
+  $SCRIPTPATH status > /dev/null
+  if [ $? -eq 0 ]; then
+    logit info "unmounting DBFS from $MOUNT_POINT"
+    if [ $LINUX -eq 1 ]; then
+      logit info "umounting the filesystem using '$FUSERMOUNT -u $MOUNT_POINT'"
+      $FUSERMOUNT -u $MOUNT_POINT
+    elif [ $SOLARIS -eq 1 ]; then
+      logit info "umounting the filesystem using '$UMOUNT $MOUNT_POINT'"
+      $UMOUNT $MOUNT_POINT > /dev/null 2>&1
+    fi
+    $SCRIPTPATH status > /dev/null
+    if [ $? -eq 0 ]; then
+      logit error "Stop - stopped, but still mounted, error"
+      exit 1
+    else
+      logit info "Stop - stopped, now not mounted"
+      exit 0
+    fi
+  else
+    logit error "filesystem $MOUNT_POINT not currently mounted, no need to stop"
+  fi
+  ;;
+
+'check'|'status')
+  ### check to see if it is mounted
+  ### fire off a short process in perl to do the check (need the alarm builtin)
+  logit debug "Checking status now"
+  $PERL <<'TOT'
+    $timeout = $ENV{'PERL_ALARM_TIMEOUT'};
+    $SIG{ALRM} = sub { 
+      ### we have a problem and need to cleanup
+      exit 3;
+      die "timeout" ;
+    };
+    alarm $timeout;
+    eval {
+      $STATUSOUT=`$ENV{'STAT'} -f -c "%T" $ENV{'MOUNT_POINT'} 2>&1 `; 
+      chomp($STATUSOUT);
+      if ( ( $ENV{'SOLARIS'} == 1 && $STATUSOUT eq 'uvfs' ) ||
+           ( $ENV{'LINUX'} == 1   && $STATUSOUT eq 'UNKNOWN (0x65735546)' ) ) {
+        ### status is okay
+        exit 0;
+      } elsif ( $STATUSOUT =~ /Transport endpoint is not connected/ ) {
+        ### we have a problem, need to clean up
+        exit 2;
+      } else {
+        ### filesystem is offline
+        exit 1;
+      }
+    };
+
+TOT
+
+  RC=$?
+  ### process return codes from the perl block
+  if [ $RC -eq 3 ]; then
+    STATUS_TIMEOUT=$(( $STATUS_TIMEOUT + 1 ))
+    logit error "Found timeout while checking status, cleaning mount automatically"
+    $SCRIPTPATH clean
+    logit debug "Check -- OFFLINE"
+    exit 1
+  elif [ $RC -eq 2 ]; then
+    STATUS_TIMEOUT=$(( $STATUS_TIMEOUT + 1 ))
+    logit error "Found error while checking status, cleaning mount automatically"
+    $SCRIPTPATH clean
+    logit debug "Check -- OFFLINE"
+    exit 1
+  elif [ $RC -eq 1 ]; then
+    logit debug "Check -- OFFLINE"
+    exit 1
+  elif [ $RC -eq 0 ]; then
+    logit debug "Check -- ONLINE"
+    exit 0
+  fi
+  ;;
+
+'restart')
+  logit info "restarting DBFS" 
+  $SCRIPTPATH stop
+  $SLEEP 2
+  $SCRIPTPATH start
+  ;;
+
+'clean'|'abort')
+  logit info "cleaning up DBFS nicely using (fusermount -u|umount)"
+  if [ $LINUX -eq 1 ]; then
+    $FUSERMOUNT -u $MOUNT_POINT
+  elif [ $SOLARIS -eq 1 ]; then
+    $UMOUNT $MOUNT_POINT > /dev/null 2>&1
+  fi
+  $SLEEP 1
+  FORCE_CLEANUP=0
+  if [ $STATUS_TIMEOUT -gt 1 ]; then
+    FORCE_CLEANUP=1
+  else
+    $SCRIPTPATH status > /dev/null 
+    if [ $? -eq 0 ]; then FORCE_CLEANUP=1; fi
+  fi
+  if [ $FORCE_CLEANUP -eq 1 ]; then 
+    logit error "tried (fusermount -u|umount), still mounted, now cleaning with (fusermount -u -z|umount -f) and kill"
+    if [ $LINUX -eq 1 ]; then
+      $FUSERMOUNT -u -z $MOUNT_POINT
+    elif [ $SOLARIS -eq 1 ]; then
+      echo "running umount -f now"
+      $UMOUNT -f $MOUNT_POINT > /dev/null 2>&1
+    fi
+    if [ $LINUX -eq 1 ]; then
+      PIDS=`$PS -ef | $GREP -w "$MOUNT_POINT" | $GREP dbfs_client| $GREP -v grep | \
+        $AWK '{print $2}'`
+      if [ -n "$PIDS" ]; then $KILL -9 $PIDS; fi
+      PIDS=`$PS -ef | $GREP -w "$MOUNT_POINT" | $GREP mount.dbfs | $GREP -v grep | \
+        $AWK '{print $2}'`
+      if [ -n "$PIDS" ]; then $KILL -9 $PIDS; fi
+    elif [ $SOLARIS -eq 1 ]; then
+      PIDS=`$PS -ef | $GREP dbfs_client| $GREP -v grep | $AWK '{print $2}'`
+      REALPIDS=' '
+      for pid in $PIDS
+      do
+        ARGS=`pargs $pid`
+        echo $ARGS | grep  "$MOUNT_POINT$"  > /dev/null
+        RET=$?
+        if [ $RET -eq 0 ]; then REALPIDS="$REALPIDS $pid"; fi
+      done
+      if [ -n "$REALPIDS" ]; then $KILL -9 $REALPIDS; fi
+      ### do it a 2nd time to clean up others
+      if [ -n "$REALPIDS" ]; then $KILL -9 $REALPIDS; fi
+      PIDS=`$PS -ef | $GREP dbfs_client| $GREP -v grep | $AWK '{print $2}'`
+      REALPIDS=' '
+      for pid in $PIDS
+      do
+        ARGS=`pargs $pid`
+        echo $ARGS | grep  "$MOUNT_POINT$"  > /dev/null
+        RET=$?
+        if [ $RET -eq 0 ]; then REALPIDS="$REALPIDS $pid"; fi
+      done
+      if [ -n "$REALPIDS" ]; then $KILL -9 $REALPIDS; fi
+
+    fi
+    exit 1
+  fi
+  ;;
+
+*)
+  $ECHO "Usage: $SCRIPTNAME { start | stop | check | status | restart | clean | abort }"
+  ;;
+
+esac
+
+

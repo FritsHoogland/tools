@@ -1,0 +1,95 @@
+#!/bin/bash
+#set -x
+# VARS
+ORAHOME=/u01/app/oracle/product/11.2.0.3/dbhome_1
+#
+echo "This script installs dbfs in the clusterware, with a passwordfile"
+echo "This scripts assumes the following:"
+echo "- must be run as root"
+echo "- a file containing the hostnames of all database servers (dcli compliant) at ~root/dbs_group"
+echo "- a database called 'dbfs' is created"
+echo "-- a dbfs filesystem in the database called fs1 is created"
+echo
+echo "Warning: $ORAHOME is used as ORACLE_HOME"
+echo "Press enter"
+read
+
+#1 check root
+if [ ! $( id -u ) -eq 0 ]; then
+	echo "This script should be run as root."
+	exit 1
+else
+	echo "User root: OK"
+fi
+
+#2 check ~/dbs_group
+if [ ! -f ~/dbs_group ]; then
+	echo "Could not find ~/dbs_group."
+	exit 1
+else
+	echo "~/dbs_group found: OK"
+fi
+
+#3 run dcli
+echo "Setup fuse"
+dcli -g ~/dbs_group -l root usermod -a -G fuse oracle
+dcli -g ~/dbs_group -l root "echo user_allow_other > /etc/fuse.conf"
+dcli -g ~/dbs_group -l root chmod 644 /etc/fuse.conf
+echo "This command can issue 'cannot create directory'"
+dcli -g ~/dbs_group -l root mkdir /mnt/dbfs
+dcli -g ~/dbs_group -l root chown oracle.dba /mnt/dbfs
+echo
+
+#4 grep grid installation home from /etc/oratab
+GRIDHOME=$( grep ^\+ASM /etc/oratab | awk -F: '{ print $2 }' )
+
+#5 clusterware stop/start to pick up fuse membership
+echo "At this point you should stop and start the clusterware to pick up fuse group membership."
+echo "This can be done using the the following commands as root:"
+echo "dcli -g ~/dbs_group -l root $GRIDHOME/bin/crsctl stop crs"
+echo "dcli -g ~/dbs_group -l root $GRIDHOME/bin/crsctl start crs"
+echo "Press CTRL-C to return to the shell to stop/start the clusterware"
+read
+echo
+
+echo "Setup libraries for dbfs client in /usr/local/lib"
+echo "This command can issue 'cannot create directory'"
+dcli -g ~/dbs_group -l root mkdir -p /usr/local/lib
+echo "Symbolic links are created. If they exist already, the message 'File exists' is issued"
+dcli -g ~/dbs_group -l root ln -s $ORAHOME/lib/libnnz11.so /usr/local/lib/libnnz11.so
+dcli -g ~/dbs_group -l root ln -s $ORAHOME/lib/libclntsh.so.11.1 /usr/local/lib/libclntsh.so.11.1
+dcli -g ~/dbs_group -l root ln -s /lib64/libfuse.so.2 /usr/local/lib/libfuse.so.2
+dcli -g ~/dbs_group -l root "echo /usr/local/lib > /etc/ld.so.conf.d/usr_local_lib.conf"
+dcli -g ~/dbs_group -l root ldconfig
+echo
+
+echo "Setup tnsnames.ora for dbfs_client"
+echo "This command can issue 'cannot create directory'"
+dcli -g ~/dbs_group -l root "su oracle -c \"mkdir -p /home/oracle/dbfs/tnsadmin\""
+dcli -g ~/dbs_group -l root -f /u01/tools/etc/tnsnames.ora.dbfs -d /tmp/tnsnames.ora.template
+cat /u01/tools/bin/setup_dbfs.modify_tns.exadata | sed "s#REPLACEME#$ORAHOME#" > /tmp/modify_tns.sh
+chmod 700 /tmp/modify_tns.sh
+dcli -g ~/dbs_group -l root -f /tmp/modify_tns.sh -d /tmp/modify_tns.sh
+dcli -g ~/dbs_group -l root /tmp/modify_tns.sh
+dcli -g ~/dbs_group -l root chown -R oracle.dba /home/oracle/dbfs
+echo
+
+echo "Setup mountscript"
+cat /u01/tools/bin/setup_dbfs.mountscript.exadata | sed "s#XXORAHOMEXX#$ORAHOME#" > /tmp/mountscript.sh
+dcli -g ~/dbs_group -l root -f /tmp/mountscript.sh -d $GRIDHOME/crs/script/mount-dbfs.sh
+dcli -g ~/dbs_group -l root chown oracle.dba $GRIDHOME/crs/script/mount-dbfs.sh
+dcli -g ~/dbs_group -l root chmod 750 $GRIDHOME/crs/script/mount-dbfs.sh
+echo
+
+echo "Register mountscript in clusterware"
+cat /u01/tools/bin/setup_dbfs.register_in_clusterware.exadata | sed "s#XXGRIDHOMEXX#$GRIDHOME#" > /tmp/register_dbfs.sh
+chmod 700 /tmp/register_dbfs.sh
+chown oracle.oinstall /tmp/register_dbfs.sh
+su oracle -c /tmp/register_dbfs.sh
+su oracle -c "/u01/app/11.2.0.3/grid/bin/crsctl start resource dbfs_mount"
+
+echo "Cleanup temporary files"
+dcli -g ~/dbs_group -l root "rm -rf /tmp/modify_tns.sh"
+rm -rf /tmp/mountscript.sh
+rm -rf /tmp/register_dbfs.sh
+echo

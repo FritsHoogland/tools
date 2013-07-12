@@ -1,0 +1,115 @@
+#!/usr/bin/bash 
+#
+# Stop and start script for the oracle internet application server 10.1.2
+#
+# works for: AIX
+#
+# Activate by linking this script in appropriate runlevel directory:
+# (as root)
+# cp /path/to/tools/bin/oracle_ias_1012_stopstart.aix /etc
+# ln -s /etc/oracle_ias_1012_stopstart.aix /etc/rc.d/rc2.d/S95oracle_ias_1012_stopstart.aix
+# ln -s /etc/oracle_ias_1012_stopstart.aix /etc/rc.d/rc2.d/K05oracle_ias_1012_stopstart.aix
+#
+# Frits Hoogland
+# -version control
+# 14042009 FH Creation
+########################################
+# Please set the following variables ! #
+########################################
+#
+# TOOLS_HOME
+TOOLS_HOME=/apps/oracle/tools
+#
+# ORACLE_USER - user with which the application server is installed; default 'oracle'
+ORACLE_USER=oracle
+#
+# DISPLAY is mandatory for application server!
+DISPLAY=10.1.69.1:0
+#
+#############################################
+# Do not modify anything beyond this line ! #
+#############################################
+PATH=/usr/bin:/etc:/usr/sbin:/usr/ucb:/usr/bin/X11:/sbin
+
+
+start() {
+	cat $TOOLS_HOME/etc/apptab | while read LINE; do
+		case $LINE in
+			\#*)
+				;;	
+			*)
+				if [ "$( echo $LINE | awk -F: '{print $3 }' )" = "Y" ]; then
+					INSTANCE_NAME=$( echo $LINE | awk -F: '{print $1}' )
+					ORACLE_HOME=$( echo $LINE | awk -F: '{print $2}' )
+					echo $"Starting oracle application server: $INSTANCE_NAME"
+                			echo -n $"     Starting enterprise manager: "
+					su - $ORACLE_USER -c "export DISPLAY=$DISPLAY; export ORACLE_HOME=$ORACLE_HOME; $ORACLE_HOME/bin/emctl start iasconsole 2>&1 > /dev/null"
+					[ "$?" -gt 0 ] && echo $"FAILED" || echo $"OK"
+					echo -n $"     Starting process manager: "
+					su - $ORACLE_USER -c "export ORACLE_HOME=$ORACLE_HOME; $ORACLE_HOME/opmn/bin/opmnctl startall 2>&1 > /dev/null"
+					[ "$?" -gt 0 ] && echo $"FAILED" || echo $"OK"
+				fi
+				;;
+		esac
+	done
+}
+stop() {
+	cat $TOOLS_HOME/etc/apptab | while read LINE; do
+		case $LINE in
+			\#*)
+				;;	
+			*)
+				if [ "$( echo $LINE | awk -F: '{print $3 }' )" = "Y" ]; then
+					INSTANCE_NAME=$( echo $LINE | awk -F: '{print $1}' )
+					ORACLE_HOME=$( echo $LINE | awk -F: '{print $2}' )
+					echo $"Stopping oracle application server: $INSTANCE_NAME"
+                			echo -n $"     Stopping enterprise manager: "
+					su - $ORACLE_USER -c "export ORACLE_HOME=$ORACLE_HOME; $ORACLE_HOME/bin/emctl stop iasconsole 2>&1 > /dev/null"
+					[ "$?" -gt 0 ] && echo $"FAILED" || echo $"OK"
+					echo -n $"     Stopping process manager: "
+					su - $ORACLE_USER -c "export ORACLE_HOME=$ORACLE_HOME; $ORACLE_HOME/opmn/bin/opmnctl stopall 2>&1 > /dev/null"
+					[ "$?" -gt 0 ] && echo $"FAILED" || echo $"OK"
+				fi
+				;;
+		esac
+	done
+}
+status() {
+	cat $TOOLS_HOME/etc/apptab | while read LINE; do
+		case $LINE in
+			\#*)
+				;;	
+			*)
+				if [ "$( echo $LINE | awk -F: '{print $3 }' )" = "Y" ]; then
+					INSTANCE_NAME=$( echo $LINE | awk -F: '{print $1}' )
+					ORACLE_HOME=$( echo $LINE | awk -F: '{print $2}' )
+					echo $"Status of oracle application server: $INSTANCE_NAME"
+					su - $ORACLE_USER -c "export ORACLE_HOME=$ORACLE_HOME; $ORACLE_HOME/opmn/bin/opmnctl status"
+				fi
+				;;
+		esac
+	done
+}
+restart() {
+	stop
+	start
+}
+
+case "$1" in
+	start)
+		start
+		;;
+	stop)
+		stop
+		;;
+	restart)
+		restart
+		;;
+	status)
+		status
+		;;
+	*)
+		echo $"Usage: $0 {start|stop|restart|status}"
+		exit 1
+		;;
+esac

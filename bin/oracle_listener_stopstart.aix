@@ -1,0 +1,78 @@
+#!/usr/bin/bash
+#
+# Stop and start script for the oracle listener
+# this is for oracle version 10.1 and earlier:
+# => in that versions, the listener is not started by dbstart
+#
+# works for: AIX
+#
+# Activate by linking this script in appropriate runlevel directory:
+# (as root)
+# cp /path/to/tools/bin/oracle_listener_stopstart.aix /etc
+# ln -s /etc/oracle_listener_stopstart.aix /etc/rc.d/rc2.d/S90oracle_listener_stopstart.aix
+# ln -s /etc/oracle_listener_stopstart.aix /etc/rc.d/rc2.d/K10oracle_listener_stopstart.aix
+#
+# WARNING! Only works for NON PASSWORD protected listener!
+#
+# Frits Hoogland
+# -version control
+# 14042009 FH Creation
+########################################
+# Please set the following variables ! #
+########################################
+#
+# ORACLE_HOME - use highest version
+ORACLE_HOME=/apps/oracle/infra
+#
+# ORACLE_USER - user with which the database is installed; default 'oracle'
+ORACLE_USER=oracle
+#
+#############################################
+# Do not modify anything beyond this line ! #
+#############################################
+PATH=/usr/bin:/etc:/usr/sbin:/usr/ucb:/usr/bin/X11:/sbin
+
+start() {
+	echo -n $"Starting oracle database listener: "
+	su - $ORACLE_USER -c "export ORACLE_HOME=$ORACLE_HOME; $ORACLE_HOME/bin/lsnrctl start 2>&1 > /dev/null"
+	RETVAL=$?
+	[ "$RETVAL" -gt 0 ] && echo $"FAILED" || echo $"OK"
+	return $RETVAL
+}
+stop() {
+	echo -n $"Stopping oracle database listener: "
+	su - $ORACLE_USER -c "export ORACLE_HOME=$ORACLE_HOME; $ORACLE_HOME/bin/lsnrctl stop 2>&1 > /dev/null"
+	RETVAL=$?
+	[ "$RETVAL" -gt 0 ] && echo $"FAILED" || echo $"OK"
+	return $RETVAL
+}
+status() {
+	echo $"Status of the oracle database listener: "
+	su - $ORACLE_USER -c "export ORACLE_HOME=$ORACLE_HOME; $ORACLE_HOME/bin/lsnrctl status"
+	RETVAL=$?
+	echo
+	return $RETVAL
+}
+restart() {
+	stop
+	start
+}
+
+case "$1" in
+	start)
+		start
+		;;
+	stop)
+		stop
+		;;
+	restart)
+		restart
+		;;
+	status)
+		status
+		;;
+	*)
+		echo $"Usage: $0 {start|stop|restart|status}"
+		exit 1
+		;;
+esac

@@ -1,0 +1,34 @@
+/oracle/db/admin/*/adump/*aud /oracle/db/admin/*/bdump/*trc /oracle/db/admin/*/udump/*trc /oracle/db/admin/*/cdump/core_[0-9]* {
+	daily
+	compress
+	delaycompress
+	rotate 7
+	missingok
+	nocreate
+}
+/oracle/db/admin/*/bdump/alert*log {
+	daily
+	compress
+	delaycompress
+	rotate 7
+	copytruncate
+	missingok
+	nocreate
+}
+/oracle/db/*/network/log/*log {
+	daily
+	compress
+	delaycompress
+	rotate 7
+	copytruncate
+	missingok
+	nocreate
+}
+/oracle/db/*/network/trace/*trc {
+	daily
+	compress
+	delaycompress
+	rotate 7
+	missingok
+	nocreate
+}

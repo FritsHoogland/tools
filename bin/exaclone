@@ -1,0 +1,350 @@
+# exaclone: clone a database on exadata
+#
+# revision:
+# 0.1 29062011 FH Creation
+
+check_env() {
+	if [ -z $ORACLE_HOME ]; then
+		echo "ERROR: ORACLE_HOME is not set."
+		exit 1
+	fi 
+	for EXECUTABLE in rman orapwd lsnrctl sqlplus srvctl; do
+		if ! type -p $EXECUTABLE >& /dev/null; then
+			echo "ERROR: $EXECUTABLE executable could not be found."
+			exit 1
+		fi
+	done
+	if [ -z "$SOURCE_INSTANCE_TNS" -o -z "$DESTINATION_INSTANCE" ]; then
+		echo "ERROR: both source and destination instance need to be set."
+		exit 1
+	fi
+}
+
+usage() {
+	cat << HERE
+Exadata instance clone script.
+
+Usage: $0 -s source instance -d destination instance -h -v
+
+-s source_instance_tns		--MANDATORY
+-d destionation_instance	--MANDATORY
+-a sysdba_account		--MANDATORY
+-p sysdba_password		--MANDATORY
+-C				Cleanup mode
+-v				verbose output, triggers shell tracing
+-h				help, this output
+
+HERE
+}
+
+check_source_instance() {
+	export ORACLE_SID=$SOURCE_INSTANCE_TNS
+	if [ "$(sqlplus -S '/ as sysdba' << EOF1 2> /dev/null
+		set termout off pagesize 0 echo off feedback off 
+		select * from dual;
+		exit;
+EOF1 )" != "X" ]; then
+		echo "ERROR: unable to log in to $SOURCE_INSTANCE_TNS."
+		exit 1
+	fi
+
+}
+
+get_source_database() {
+	export ORACLE_SID=$SOURCE_INSTANCE_TNS
+	SOURCE_DATABASE=$(sqlplus -S '/ as sysdba' << EOF2 2> /dev/null
+		set termout off pagesize 0 echo off feedback off 
+		select name from v\$database;
+		exit;
+EOF2 )
+	SOURCE_DATABASE=$(srvctl config database -d $SOURCE_DATABASE | grep 'Database name' | sed 's/^.*:\ \(.*\)/\1/')
+	if [ -z "$SOURCE_DATABASE" ]; then
+		echo "ERROR: srvctl config database -d DATABASE does not lead to output. Is the database registered in the clusterware?"
+		exit 1
+	fi
+}
+
+
+check_destination_entry() {
+	if [ "$( tnsping $DESTINATION_INSTANCE | tail -1 | sed 's/^\(TNS-[0-9]*\).*/\1/' )" != "TNS-03505" ]; then
+		echo "ERROR: $DESTINATION_INSTANCE could be resolved."
+		exit 1
+	fi
+}
+
+check_listener_existence() {
+	if [ "$( lsnrctl status clone_listener | tail -1 | sed 's/.*\(TNS-01101\).*/\1/' )" != "TNS-01101" ]; then
+		echo "ERROR: listener clone_listener already exists."
+		exit 1
+	fi
+}
+
+create_destination_passwordfile() {
+	if ! orapwd file=$ORACLE_HOME/dbs/orapw$DESTINATION_INSTANCE password=oracle force=y >/dev/null; then
+		echo "ERROR: creation of password file did not succeed."
+		exit 1
+	fi
+}
+	
+create_destination_tnsentry() {
+	if [ ! -f $ORACLE_HOME/network/admin/tnsnames.ora ]; then
+		echo "ERROR: $ORACLE_HOME/network/admin/tnsnames.ora could not be found."
+		exit 1
+	elif ! echo "$DESTINATION_INSTANCE=(DESCRIPTION=(ADDRESS=(PROTOCOL=IPC)(KEY=clone_listener))(CONNECT_DATA=(SERVER=DEDICATED)(SERVICE_NAME=$DESTINATION_INSTANCE)))" >> $ORACLE_HOME/network/admin/tnsnames.ora; then
+		echo "ERROR: unable to add tns entry for destination instance."
+		exit 1
+	fi
+}
+
+remove_destination_tnsentry() {
+	if [ ! -f $ORACLE_HOME/network/admin/tnsnames.ora ]; then
+                echo "ERROR: $ORACLE_HOME/network/admin/tnsnames.ora could not be found."
+                exit 1
+	fi
+	sed -i "s/^$DESTINATION_INSTANCE=(DESCRIPTION=(ADDRESS=(PROTOCOL=IPC)(KEY=clone_listener))(CONNECT_DATA=(SERVER=DEDICATED)(SERVICE_NAME=$DESTINATION_INSTANCE)))\$//" $ORACLE_HOME/network/admin/tnsnames.ora
+}
+
+get_source_diskgroups() {
+	export ORACLE_SID=$SOURCE_INSTANCE_TNS
+        SOURCE_DATARECO_DISKGROUPS=$( sqlplus -S '/ as sysdba' << EOF3 2> /dev/null
+		set termout off pagesize 0 echo off feedback off
+                select listagg(name,',') within group (order by name) from v\$asm_diskgroup where state='CONNECTED' and name like 'DATA_%' or name like 'RECO_%';
+                exit;
+EOF3 )
+        SOURCE_DATA_DISKGROUP=$( sqlplus -S '/ as sysdba' << EOF4 2> /dev/null
+		set termout off pagesize 0 echo off feedback off
+                select listagg(name,',') within group (order by name) from v\$asm_diskgroup where state='CONNECTED' and name like 'DATA_%';
+                exit;
+EOF4 )
+        SOURCE_ALL_DISKGROUPS=$( sqlplus -S '/ as sysdba' << EOF5 2> /dev/null
+                set termout off pagesize 0 echo off feedback off
+                select listagg(name,',') within group (order by name) from v\$asm_diskgroup where state='CONNECTED';
+                exit;
+EOF5 )
+}
+
+create_ipc_listener() {
+	printf "clone_listener=(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=IPC)(KEY=clone_listener))))\nSID_LIST_clone_listener=(SID_LIST=(SID_DESC=(SID_NAME=$DESTINATION_INSTANCE)(ORACLE_HOME=$ORACLE_HOME))))\n" >> $ORACLE_HOME/network/admin/listener.ora
+	if ! lsnrctl start clone_listener >& /dev/null; then
+		echo "ERROR: error starting clone_listener"
+		exit 1
+	fi
+}
+
+remove_ipc_listener() {
+	lsnrctl stop clone_listener >& /dev/null
+	sed -i "s/^clone_listener=.*$//" $ORACLE_HOME/network/admin/listener.ora
+	sed -i "s/^SID_LIST_clone_listener=.*$//" $ORACLE_HOME/network/admin/listener.ora
+}	
+
+create_dest_initora() {
+	printf "db_name=$DESTINATION_INSTANCE\ndiagnostic_dest='/u01/app/oracle'\n" > $ORACLE_HOME/dbs/init$DESTINATION_INSTANCE.ora
+}
+
+create_dest_adump() {
+	mkdir -p /u01/app/oracle/admin/$DESTINATION_INSTANCE/adump
+}
+
+startup_nomount_dest() {
+	export ORACLE_SID=$DESTINATION_INSTANCE
+	sqlplus -S '/ as sysdba' << EOF6 >& /dev/null
+	startup nomount pfile=$ORACLE_HOME/dbs/init$DESTINATION_INSTANCE.ora;
+	exit;
+EOF6
+}
+
+cold_clone_source_to_dest() {
+	export ORACLE_SID=$SOURCE_INSTANCE_TNS
+	rman target $SOURCE_SYSDBA/$SOURCE_SYSDBA_PASSWORD auxiliary sys/oracle@$DESTINATION_INSTANCE << EOF8 > $CLONE_LOG
+		shutdown immediate;
+		host "srvctl stop database -d $SOURCE_DATABASE";
+		startup mount;
+		duplicate target database to $DESTINATION_INSTANCE
+		from active database
+		spfile
+		parameter_value_convert '$SOURCE_DATABASE','$DESTINATION_INSTANCE'
+		set sga_max_size = '1G'
+		set sga_target = '800M'
+		set cluster_database = 'FALSE';
+		startup force;
+		host "srvctl start database -d $SOURCE_DATABASE";
+		exit;
+EOF8
+}
+
+hot_clone_source_to_dest() {
+	export ORACLE_SID=$SOURCE_INSTANCE_TNS
+	rman target $SOURCE_SYSDBA/$SOURCE_SYSDBA_PASSWORD auxiliary sys/oracle@$DESTINATION_INSTANCE << EOFD > $CLONE_LOG
+		duplicate target database to $DESTINATION_INSTANCE
+		from active database
+		spfile
+		parameter_value_convert '$SOURCE_DATABASE','$DESTINATION_INSTANCE'
+		set sga_max_size = '1G'
+		set sga_target = '800M'
+		set cluster_database = 'FALSE';
+		exit;
+EOFD
+}
+
+set_dest_noarchivelog() {
+	export ORACLE_SID=$DESTINATION_INSTANCE
+	sqlplus -S '/ as sysdba' << EOFE >& /dev/null
+	startup mount force;
+	alter database noarchivelog;
+	alter database open;
+	exit;
+EOFE
+}
+
+remove_dest_threads_logfiles() {
+	export ORACLE_SID=$DESTINATION_INSTANCE
+        sqlplus -S '/ as sysdba' << EOF9 >& /dev/null 
+                set termout off pagesize 0 echo off feedback off
+		spool /tmp/clone.$$.sql
+		select 'alter database disable thread '||thread#||';' from v\$thread where thread# not in (select thread# from v\$instance);
+		select 'alter database drop logfile group '||group#||';' from v\$log where thread# not in (select thread# from v\$instance);
+		spool off;
+		@/tmp/clone.$$.sql;
+		host "rm /tmp/clone.$$.sql";
+                exit;
+EOF9
+}
+
+register_dest_clusterware() {
+	if ! srvctl add database -d $DESTINATION_INSTANCE -n $DESTINATION_INSTANCE -o $ORACLE_HOME -p $(echo "+$SOURCE_DATA_DISKGROUP")/$DESTINATION_INSTANCE/spfile$DESTINATION_INSTANCE.ora -c single -a "$SOURCE_ALL_DISKGROUPS" -x $(hostname -s) >& /dev/null; then
+		echo "ERROR: srvctl add database signalled error."
+		exit 1
+	fi
+	if ! srvctl start database -d $DESTINATION_INSTANCE >& /dev/null; then
+		echo "ERROR: srvctl start database -d $DESTINATION_INSTANCE signalled error."
+		exit 1
+	fi
+}
+
+check_destination_open() {
+	export ORACLE_SID=$DESTINATION_INSTANCE
+        if [ "$( sqlplus -S '/ as sysdba' << EOFA 2> /dev/null
+                set termout off pagesize 0 echo off feedback off
+                select * from dual;
+                exit;
+EOFA )" != "X" ]; then
+                echo "ERROR: unable to log in to $DESTINATION_INSTANCE."
+		echo "       Check clone logfile in /tmp."
+                exit 1
+        fi
+}
+
+check_destination_clusterware() {
+	if [ "$( srvctl status database -d $DESTINATION_INSTANCE | tail -1 | sed 's/^\(PRCR-[0-9]*\).*/\1/' )" != "PRCR-1001" ]; then
+		echo "ERROR: clusterware does not respond with PRCR-1001 : Resource ora.$DESTINATION_INSTANCE.db does not exist."
+		exit 1
+	fi
+}
+
+remove_failed_dest() {
+	if [ -z "$DESTINATION_INSTANCE" ]; then
+		echo "ERROR: destination instance must be set with -d option."
+		exit 1
+	fi
+	rm $ORACLE_HOME/dbs/orapw$DESTINATION_INSTANCE
+	export ORACLE_SID=$DESTINATION_INSTANCE
+	sqlplus -S '/ as sysdba' << EOFB >& /dev/null
+                set termout off pagesize 0 echo off feedback off
+                shutdown abort;
+                exit;
+EOFB
+}
+
+get_source_archive_mode() {
+	export ORACLE_SID=$SOURCE_INSTANCE_TNS
+        ARCHIVE_MODE=$( sqlplus -S '/ as sysdba' << EOFC 2> /dev/null
+                set termout off pagesize 0 echo off feedback off
+                select log_mode from v\$database;
+                exit;
+EOFC )
+
+}
+
+
+ORIGINAL_ORACLE_SID=$ORACLE_SID	
+SOURCE_INSTANCE_TNS=
+SOURCE_DATABASE=
+DESTINATION_INSTANCE=
+SOURCE_SYSDBA=
+SOURCE_SYSDBA_PASSWORD=
+SOURCE_DATARECO_DISKGROUPS=
+SOURCE_DATA_DISKGROUP=
+SOURCE_ALL_DISKGROUPS=
+MODE=clone
+ARCHIVE_MODE=
+CLONE_LOG=/tmp/clone_log_$$.log
+while getopts "vs:d:p:a:hCX" OPTION; do
+	case $OPTION in
+		v)
+			set -x
+			;;
+		s)
+			SOURCE_INSTANCE_TNS=$OPTARG
+			;;
+		a)
+			SOURCE_SYSDBA=$OPTARG
+			;;
+		p)
+			SOURCE_SYSDBA_PASSWORD=$OPTARG
+			;;
+		d)
+			DESTINATION_INSTANCE=$OPTARG
+			;;
+		C)
+			MODE=cleanup
+			;;
+		h|?)
+			usage
+			exit
+			;;
+	esac
+done
+
+if [ $MODE = "clone" ]; then
+	echo "** Clone mode"
+	echo "Part 1: Check phase"
+	check_env
+	check_source_instance
+	get_source_database
+	get_source_diskgroups
+	check_destination_entry
+	check_destination_clusterware
+	check_listener_existence
+	echo "Part 2: Prepare environment"
+	create_destination_passwordfile
+	create_destination_tnsentry
+	create_ipc_listener
+	create_dest_initora
+	create_dest_adump
+	startup_nomount_dest
+	echo "Part 3: Clone"
+	get_source_archive_mode
+	if [ "$ARCHIVE_MODE" = "NOARCHIVELOG" ]; then
+		cold_clone_source_to_dest
+	elif [ "$ARCHIVE_MODE" = "ARCHIVELOG" ]; then
+		hot_clone_source_to_dest
+		set_dest_noarchivelog
+	else
+		echo "ERROR: archive mode $ARCHIVE_MODE unknown."
+		exit 1
+	fi
+	echo "Part 4: Post clone"
+	check_destination_open
+	remove_dest_threads_logfiles
+	register_dest_clusterware
+	echo "Part 5: Cleanup"
+	remove_destination_tnsentry
+	remove_ipc_listener
+elif [ $MODE = "cleanup" ]; then
+	echo "** Cleanup mode"
+	remove_destination_tnsentry
+	remove_ipc_listener
+	remove_failed_dest
+fi
+
+export ORACLE_SID=$ORIGINAL_ORACLE_SID

@@ -1,0 +1,9 @@
+# This script accepts one variable: the name of the database to backup.
+run {
+SHUTDOWN IMMEDIATE;
+HOST 'srvctl stop database -d &1 -o immediate';
+STARTUP MOUNT;
+BACKUP DATABASE;
+ALTER DATABASE OPEN;
+HOST 'srvctl start database -d &1';
+}

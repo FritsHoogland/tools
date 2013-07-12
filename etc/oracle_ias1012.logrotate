@@ -1,0 +1,35 @@
+/oracle/gc/oms10g/webcache/logs/event_log {
+        daily
+        compress
+        delaycompress
+        rotate 7
+        copytruncate
+        missingok
+	nocreate
+}
+/oracle/gc/oms10g/webcache/logs/archive/access_log.[0-9]* {
+	daily
+	compress
+	delaycompress
+	rotate 7
+	missingok
+	nocreate
+}
+/oracle/gc/oms10g/j2ee/*/log/*/*log {
+	daily
+	compress
+	delaycompress
+	rotate 7
+	missingok
+	copytruncate
+	nocreate
+}
+/oracle/gc/oms10g/Apache/Apache/logs/access_log.[0-9]* /oracle/gc/oms10g/Apache/Apache/logs/error_log.[0-9]* /oracle/gc/oms10g/Apache/Apache/logs/ssl_engine_log {
+	daily
+	compress
+	delaycompress
+	rotate 7
+	missingok
+	copytruncate
+	nocreate
+}

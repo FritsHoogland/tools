@@ -1,0 +1,74 @@
+#!/bin/bash
+#
+# Xvfb.redhat	stop and start script for X virtual framebuffer server
+#
+# chkconfig: 235 50 50
+# description: This script starts and stops X virtual framebuffer server
+#
+# works for: RHEL
+#
+# Activate using chkconfig:
+# (as root)
+# cp /path/to/tools/bin/Xvfb.redhat /etc/init.d
+# chkconfig --add Xvfb.redhat 
+#
+# Frits Hoogland
+# -version control
+# 23042009 FH Creation
+########################################
+# Please set the following variables ! #
+########################################
+#
+# XVFB_USER - which user is used for running Xvfb?
+XVFB_USER=nobody
+#
+# XVFB_DISPLAY - display number Xvfb uses
+XVFB_DISPLAY=:99
+#
+# XVFB - the Xvfb executable
+XVFB=/usr/bin/Xvfb
+#
+# XDPYINFO - a tool for requesting information from X
+XDPYINFO=/usr/bin/xdpyinfo
+#
+#############################################
+# Do not modify anything beyond this line ! #
+#############################################
+. /etc/init.d/functions
+
+start() {
+	echo -n $"Starting Xvfb: "
+	touch /var/lock/subsys/Xvfb.redhat
+	su $XVFB_USER -s /bin/bash -c "$XVFB -ac $XVFB_DISPLAY 2>&1 > /dev/null &"
+	RETVAL=$?
+	echo
+	return $RETVAL
+}
+stop() {
+	echo -n $"Stopping Xvfb: "
+	rm -f /var/lock/subsys/Xvfb.redhat
+	pkill -u $XVFB_USER $( echo $XVFB | sed 's/.*\///' )
+	RETVAL=$?
+	echo
+	return $RETVAL
+}
+restart() {
+	stop
+	start
+}
+
+case "$1" in
+	start)
+		start
+		;;
+	stop)
+		stop
+		;;
+	restart)
+		restart
+		;;
+	*)
+		echo $"Usage: $0 {start|stop|restart}"
+		exit 1
+		;;
+esac

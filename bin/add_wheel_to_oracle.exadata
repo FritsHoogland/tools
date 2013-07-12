@@ -1,0 +1,15 @@
+#!/bin/bash
+##
+# add_wheel_to_oracle.exadata
+# 
+# Description: This is a simple script that adds the 'wheel' group to the oracle user. This enables the usage of su to root for oracle.
+#              This script is created for Oracle Exadata Database/Computing layer systems, and possibly works on other OL/RHEL systems too.
+#
+# 16092011 Frits Hoogland
+
+if [ ! $( id -u ) -eq 0 ]; then
+	echo "This script should be run as root."
+	exit 1
+fi
+usermod -a -G wheel oracle
+printf "Don't forget to check for the following lines in the sudoers file (visudo):\n## Allows people in group wheel to run all commands\n# %%wheel        ALL=(ALL)       ALL\nThe pound/hash sign (#) needs to be removed to enable root access with sudo via the wheel group.\n"

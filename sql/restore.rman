@@ -1,0 +1,12 @@
+# This script accepts one variable: the name of the database to stop for recovery.
+run {
+shutdown immediate;
+host 'srvctl stop database -d &1 -o immediate';
+startup nomount;
+restore controlfile from autobackup;
+alter database mount;
+restore database;
+recover database;
+alter database open resetlogs;
+host 'srvctl start database -d &1';
+}

@@ -1,0 +1,8 @@
+#!/bin/bash
+# 168 = 24 * 7; a week
+HOURS=168
+for DIR in /u01/app/*/grid/rdbms/audit; do
+  if [ -d "$DIR" ]; then
+    /usr/sbin/tmpwatch -maf $HOURS "$DIR"
+  fi
+done

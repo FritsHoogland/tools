@@ -1,0 +1,73 @@
+#!/bin/bash
+#
+# oracle_db_stopstart.redhat	stop and start script for the oracle database
+#
+# chkconfig: 235 20 80
+# description: This script starts and stops the oracle database
+#
+# works for: RHEL
+#
+# Activate using chkconfig:
+# (as root)
+# cp /path/to/tools/bin/oracle_db_stopstart.redhat /etc/init.d
+# chkconfig --add oracle_db_stopstart.redhat 
+#
+# WARNING! Only works for NON PASSWORD protected listener!
+#
+# Frits Hoogland
+# -version control
+# 26032009 FH Creation
+########################################
+# Please set the following variables ! #
+########################################
+#
+# ORACLE_HOME - use highest version
+ORACLE_HOME=/oracle/db/10.2.0.4
+#
+# ORACLE_USER - user with which the database is installed; default 'oracle'
+ORACLE_USER=oracle
+#
+# ORACLE_HOME_LISTENER - start listener from this home, leave blank if listener is not to be started with this script; default ORACLE_HOME
+ORACLE_HOME_LISTENER=$ORACLE_HOME
+#
+#############################################
+# Do not modify anything beyond this line ! #
+#############################################
+. /etc/init.d/functions
+
+start() {
+	echo -n $"Starting oracle databases: "
+	touch /var/lock/subsys/oracle_db_stopstart.redhat
+	su $ORACLE_USER -c "export ORACLE_HOME=$ORACLE_HOME; $ORACLE_HOME/bin/dbstart $ORACLE_HOME_LISTENER"
+	RETVAL=$?
+	echo
+	return $RETVAL
+}
+stop() {
+	echo -n $"Stopping oracle databases: "
+	rm -f /var/lock/subsys/oracle_db_stopstart.redhat
+	su $ORACLE_USER -c "export ORACLE_HOME=$ORACLE_HOME; $ORACLE_HOME/bin/dbshut $ORACLE_HOME_LISTENER"
+	RETVAL=$?
+	echo
+	return $RETVAL
+}
+restart() {
+	stop
+	start
+}
+
+case "$1" in
+	start)
+		start
+		;;
+	stop)
+		stop
+		;;
+	restart)
+		restart
+		;;
+	*)
+		echo $"Usage: $0 {start|stop|restart}"
+		exit 1
+		;;
+esac

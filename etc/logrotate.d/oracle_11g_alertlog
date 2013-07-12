@@ -1,0 +1,16 @@
+/u01/app/oracle/diag/asm/*/*/trace/alert_*.log {
+    weekly
+    rotate 4
+    copytruncate
+    compress
+    missingok
+    nocreate
+}
+/u01/app/oracle/diag/rdbms/*/*/trace/alert_*.log {
+    weekly
+    rotate 4
+    copytruncate
+    compress
+    missingok
+    nocreate
+}

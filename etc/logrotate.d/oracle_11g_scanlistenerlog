@@ -1,0 +1,8 @@
+/u01/app/*/grid/log/diag/tnslsnr/*/*/trace/*.log {
+    weekly
+    rotate 4
+    copytruncate
+    compress
+    missingok
+    nocreate
+}
