@@ -81,3 +81,5 @@ run_tuning_task		..
 segment_advisor		run segment advisor on a certain segment
 sql_monitor		run sql_monitor report for a given sid or sid and sql_id (sql_id in the past)
 view_tuning_task	view output of a certain tuning task
+
+
