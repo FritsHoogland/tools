@@ -10,8 +10,8 @@ DIRS="
 
 for DIR in $DIRS; do
   if [ -d "$DIR" ]; then
-    printf " $DIR "
-    printf " $(date -r $DIR/$(ls -tr $DIR | head -1)) "
-    printf " $(ls -f $DIR | wc -l)\n"
+    printf " $(du -sh $DIR ) "
+    printf " Oldest: $(date -r $DIR/$(ls -tr $DIR | head -1)) "
+    printf " # Files: $(ls -f $DIR | wc -l)\n"
   fi
 done
