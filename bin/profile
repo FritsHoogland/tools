@@ -58,7 +58,7 @@ get_instancename_from_dbname() {
 # Check for terminal type.
 # sftp will quit when text is send.
 #
-if [ "${TERM:0:5}" = "xterm" -o "$TERM" = "screen" -o "$TERM" = "vt100" -o "$TERM" = "console" ]; then
+if [ "${TERM:0:5}" = "xterm" -o "${TERM:0:6}" = "screen" -o "${TERM:0:2}" = "vt" -o "${TERM:0:7}" = "console" ]; then
 	# save ORACLE_HOME
 	OLD_ORACLE_HOME=$ORACLE_HOME
         #
