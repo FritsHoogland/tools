@@ -167,6 +167,7 @@ if [ "${TERM:0:5}" = "xterm" -o "$TERM" = "screen" -o "$TERM" = "vt100" -o "$TER
         #
         alias reprofile=". $TOOLS_HOME/bin/profile"
 	alias oh="cd \$ORACLE_HOME"
+        alias oraps="$TOOLS_HOME/bin/profile"
 	#
 	# restore ORACLE_HOME
 	export ORACLE_HOME=$OLD_ORACLE_HOME
