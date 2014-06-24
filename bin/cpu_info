@@ -1,1 +1,2 @@
-awk -F: '/^physical/ && !ID[$2] { P++; ID[$2]=1 }; /^cpu cores/ { CORES=$2 };  /^cpu cores/ { T++ }; END { print "sockets: "P"\ncores: "CORES"\nthreads: "T }' /proc/cpuinfo
+[ -z "$1" ] && CPUINFO="/proc/cpuinfo" || CPUINFO=$1
+awk -F: '/^physical/ && !ID[$2] { P++; ID[$2]=1 }; /^cpu cores/ { CORES=$2 };  /^cpu cores/ { T++ }; END { print "sockets: "P"\ntot cores: "CORES*P"\ntot threads: "T }' $CPUINFO
