@@ -1,0 +1,213 @@
+#!/bin/sh
+# set -x
+
+### Clean-up if we are stopped in our run ##
+rm -f /tmp/.oraps*.$$
+
+### Display help ### 
+usage() {
+cat <<-EOF
+
+usage:
+
+  oraps -d <ORACLE_SID> - shows PS of all processes for this database, linked to OS PS statistics
+  oraps -h              - shows this help file
+
+Description of columns
+
+  Column:       Description:
+  ------------- --------------------------------------------------------------------------------------------
+  OS_PID        process ID number of the process at the OS level
+  RSS_MB        resident set size, the non-swapped physical memory that a task has used as seen by linux
+  VSZ_MB        virtual memory size of the process in MB at OS level. Device mappings are currently excluded
+  %CPU          the CPU time used divided by the time the process has been running (cputime/realtime ratio)
+                expressed as a percentage
+  OS_USERNAME   Username of OS user, reported from the database, this can be the OS user from the
+                application server OS. If the username is (none) then this session is a background process
+  DB_USERNAME   Username for oracle, used to login to the database, when the username is between Parentheses
+                then it is the name of the background process (e.g. username (DBW1) is a database writer)
+  PGA_USED_MB   PGA Memory currently used by the shadow process
+  PGA_ALLOC_MB  PGA memory currently allocated by the process (including free PGA memory not yet released to"
+                the operating system by the server process)
+  SID           Session ID of the shadow process, if there is a dash (-) then the process spawned but not
+                connected to any database process yet (e.g. Pnnn processes for parallel query slaves)
+  SQL_ID        Displays the SQL_ID of the currently running SQL, it is set to (none) if no SQL is running
+
+EOF
+    exit 1
+}
+
+### get istance name function from profile
+get_instancename_from_dbname() {
+        DB_ENV_TO_SET=$RUNDB
+        ASMPATH=$( grep ^+ASM $TOOLS_HOME/etc/oratab | tail -1 | awk -F: '{ print $2 }' )
+        if [ ! -f "$ASMPATH/bin/crsctl" ]; then
+                ORA_INST_NAME=$DB_ENV_TO_SET
+        else
+                # beneath is a workaround to get through profile if the system is starting,
+                # and the cluster is not up yet, or the cluster is turned off.
+                if [ ! -z "$( pgrep -f asm_pmon_+.* )" ]; then
+                	ORA_INST_NAME=$( $ASMPATH/bin/crsctl status resource ora.${DB_ENV_TO_SET}.db -f | grep GEN_USR_ORA_INST_NAME | grep $( hostname -s ) | sed 's/^.*=//' )
+                	if [ -z "$ORA_INST_NAME" ]; then
+                       		ORA_INST_NAME=$DB_ENV_TO_SET
+                	fi
+                else
+                        ORA_INST_NAME=$DB_ENV_TO_SET
+                fi
+        fi
+}
+
+### Gather all data needed ###
+function gather_data() {  
+
+get_instancename_from_dbname
+
+export ORACLE_SID=$RUNDB; export ORAENV_ASK=NO; . oraenv; export ORACLE_SID=$ORA_INST_NAME
+
+test -f $ORACLE_HOME/bin/sqlplus || die "SQL*Plus is not found!"
+
+
+ps -eo pid,rss,vsz,%cpu,args | grep [o]ra.*.$ORACLE_SID | grep -v \+ASM | awk '{print $1,$2,$3,$4}' > /tmp/.oraps0.$$ 
+
+sqlplus -S / as sysdba<<EOF > /tmp/.oraps1.$$
+ 
+set lines 200
+set feedback off
+set head off
+col pga_used_mb form 9999
+col pga_alloc_mb form 9999
+col sid form a5
+col spid form 99999
+col osuser form a18
+col username form a18
+ 
+select * from (
+select p.spid,
+       nvl(s.osuser, '(none)') osuser,
+       case when s.username is null then '('||p.pname||')' else s.username end username,
+       round((p.pga_used_mem/1024/1024),1) pga_used_mb,
+       round((p.pga_alloc_mem/1024/1024),1) pga_alloc_mb,
+       nvl(to_char(s.sid),'-') sid,
+       nvl(s.sql_id, '(none)') sql_id
+from v\$process p, v\$session s
+where s.paddr(+) = p.addr
+and spid is not null
+order by to_number(spid) asc)
+where sid <> (sys_context('USERENV', 'SID'));
+ 
+EOF
+} 
+
+### Create a sort ###
+function create_sort()
+{
+    
+    echo "SORT_COLS = "$SORT_COLS
+    exit 0
+
+}
+
+### Enable debugging ###
+function do_debug() 
+{
+
+    gather_data
+    cat /tmp/.oraps0.$$
+    cat /tmp/.oraps1.$$ 
+    format_output
+   
+    clean_up
+}
+
+### Format output ###
+function format_output() 
+{
+    join /tmp/.oraps0.$$ /tmp/.oraps1.$$ | 
+    awk -v ORACLE_SID=$ORACLE_SID 'BEGIN { format ="%-6s %-8s %-8s %4s %1s %-15s %-15s %11s %12s %5s %-13s\n"
+                 printf "\n--- Displaying for Instance: "ORACLE_SID" ---\n\n"
+                 printf format, "OS_PID", "RSS_MB  ", "VSZ_MB  ", "%CPU", "|", "OS_USERNAME      ", "DB_USERNAM   E    ", "PGA_USED_MB", "PGA_ALLOC_MB", "  SID", "SQL_ID       "
+                 printf format, "------", "--------", "--------", "----", "+", "-----------------", "------------------", "-----------", "------------", "-----", "-------------" }
+               { printf "%-6s %-8.1f %-8.1f %4.1f %1s %-18s %-18s %11.0f %12.0f %5.0f %-13s\n", $1, $2/1024, $3/1024, $4, "|", $5, $6, $7, $8, $9, $10, $11 }' 
+}
+
+### Die process, die! ###
+function die()
+{
+    echo "$*"
+    exit 1
+}
+
+### clean up the mess we made ###
+function clean_up()
+{
+rm -f /tmp/.oraps*.$$
+} 
+
+### putting it all together ###
+function dbps()
+{
+    SORT=
+    gather_data
+    format_output | \
+    awk 'NR < 6 {print $0} NR > 5 {print $0 | "sort -r -n -k4"}'
+    
+    clean_up
+    
+    exit 0
+}
+
+## MAIN ###
+function getopts() {
+    argv=()
+    while [ $# -gt 0 ]
+    do
+        opt=$1
+        shift
+        case ${opt} in
+            -d|--database)
+                if [ $# -eq 0 -o "${1:0:1}" = "-" ]; then
+                    die "The ${opt} option requires an ORACLE_SID."
+                fi
+                RUNDB="$1"
+                shift
+                dbps
+                ;;
+            -h|--help)
+                usage
+                ;;
+            -s|--sort)
+                if [ $# -eq 0 -o "${1:0:1}" = "-" ]; then
+                    die "The ${opt} option needs a column name to sort on."
+                fi
+                SORT_COLS="$1"
+                shift
+                create_sort
+                ;;
+            -V|--version)
+                echo "$0 version $version"
+                exit 0
+                ;;
+            -x|--debug)
+                if [ $# -eq 0 -o "${1:0:1}" = "-" ]; then
+                    die "The ${opt} option requires an ORACLE_SID."
+                fi
+                RUNDB="$1"
+                shift
+                do_debug
+                ;;
+            *)
+                if [ "${opt:0:1}" = "-" ]; then
+                    die "${opt}: unknown option."
+                fi
+                argv+=(${opt});;
+        esac
+    done 
+}
+
+trap "clean_up; exit" 0 1 2 3 15
+getopts $*
+
+### You will get here if no options are given ## 
+dbps
+
+
