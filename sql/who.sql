@@ -8,7 +8,7 @@ col prog format a40 trunc
 col sid format 9999
 col child for 99999
 col spid format 999999
-col module format a60
+col module format a40
 col action format a20
 col client_info format a30
 select /*+ rule as.sql */ a.sid||','||a.serial#||',@'||a.inst_id as sid_serial_inst, 
