@@ -1,2 +1,10 @@
-[ -z "$1" ] && CPUINFO="/proc/cpuinfo" || CPUINFO=$1
+echo "== summary =="
+CPUINFO="/proc/cpuinfo" || CPUINFO=$1
 awk -F: '/^physical/ && !ID[$2] { P++; ID[$2]=1 }; /^cpu cores/ { CORES=$2 };  /^cpu cores/ { T++ }; END { print "sockets: "P"\ntot cores: "CORES*P"\ntot threads: "T }' $CPUINFO
+echo "== cpu map =="
+echo " T -  S -  C"
+C=0
+cat /proc/cpuinfo | egrep "processor|physical id|core id" | awk '{ print $(NF) }' | while read V; do
+	[ $C -lt 2 ] && printf "%2d - " $V || printf "%2d\n" $V
+	[ $C -lt 2 ] && let ++C || C=0
+done
