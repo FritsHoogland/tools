@@ -6,6 +6,182 @@
 # 21072010 Frits Hoogland Added stripping of tab chars (clusterware adds ^I^I# added by agent)
 # 08062011 Frits Hoogland Added xterm-color as terminal
 # 18092011 Frits Hoogland Rewrote sed script to awk because sed on solaris is behaving different
+# 09012015 Klaas-jan Jongsma Added support 12c -MGMTDB
+#
+# Profile
+# This script lists the database instances in /etc/oratab
+# In order to set the environment of a listed database, type its name.
+#
+# Installing profile:
+# 1) untar the tools, it should have a little directory structure like:
+#    ?/tools/bin
+#           /etc
+#           /sql
+# 2) set tools home in the ?/tools/bin/profile script
+# 3) add ?/tools/bin/profile to .bash_profile
+# 4) symlink /etc/oratab to ?/tools/etc/oratab
+#
+# oracle tools home
+TOOLS_HOME=/u01/tools
+#
+# AGENT_URL - use agent url to obtain status
+# this is the url of the agent as listed with:
+# 'emctl status agent' at 'Agent URL' 
+# => empty AGENT_URL will revert to emctl status agent checking (slow)
+AGENT_URL=https://localhost.localdomain:3872/emd/main/
+#
+# EDITOR - set editor to use vi with sqlplus 'edit'/'ed' command
+export EDITOR=vi
+#
+# SQLPATH - set oracle path to let sqlplus find the scripts in TOOLS_HOME/sql
+export SQLPATH=$TOOLS_HOME/sql
+
+get_instancename_from_dbname() {
+        DB_ENV_TO_SET=$1
+        ASMPATH=$( grep ^+ASM $TOOLS_HOME/etc/oratab | tail -1 | awk -F: '{ print $2 }' )
+        if [ ! -f "$ASMPATH/bin/crsctl" ]; then
+                ORA_INST_NAME=$DB_ENV_TO_SET
+        else
+                # beneath is a workaround to get through profile if the system is starting,
+                # and the cluster is not up yet, or the cluster is turned off.
+                if [ ! -z "$( pgrep -f asm_pmon_+.* )" ]; then
+                	ORA_INST_NAME=$( $ASMPATH/bin/crsctl status resource ora.${DB_ENV_TO_SET}.db -f | grep GEN_USR_ORA_INST_NAME | grep $( hostname -s ) | sed 's/^.*=//' )
+                	if [ -z "$ORA_INST_NAME" ]; then
+                       		ORA_INST_NAME=$DB_ENV_TO_SET
+                	fi
+                else
+                        ORA_INST_NAME=$DB_ENV_TO_SET
+                fi
+        fi
+	echo $ORA_INST_NAME
+}
+
+# Check for terminal type.
+# sftp will quit when text is send.
+#
+if [ "${TERM:0:5}" = "xterm" -o "${TERM:0:6}" = "screen" -o "${TERM:0:2}" = "vt" -o "${TERM:0:7}" = "console" ]; then
+	# save ORACLE_HOME
+	OLD_ORACLE_HOME=$ORACLE_HOME
+        #
+        # Banner and prompt
+        #
+        printf "Logged on to: $(uname -n); architecture: $(uname -p); operating system: $(uname -s)\n"
+	uptime
+	printf "\n"
+        PS1='[\u@\h [$ORACLE_SID] \W]\$ '
+        if [ ! -x "$( which oraenv 2>/dev/null )" ]; then
+                echo ">> Error. oraenv is not in path!"
+                echo ">> oraenv is usually installed by oracle products in /usr/local/bin."
+        fi
+        # 
+        # Cgroups detection
+        #
+	if [ -f /proc/self/cgroup ]; then
+                if [ $(wc -c /proc/self/cgroup | awk '{ print $1 }') -gt 0  ]; then
+                        echo "Cgroups configured!"
+                        cat /proc/self/cgroup
+                        echo
+                fi
+        fi
+        #
+        # Database
+        #
+        if [ -f $TOOLS_HOME/etc/oratab ]; then
+                printf "=Database         Defup Isup  ORACLE_HOME\n"
+		let DEFNR=0
+		set -f
+                case $( uname -s ) in
+                        "SunOS")
+                                FS="\t"
+                                ;;
+                        *)
+                                FS="\\t"
+                                ;;
+                esac
+                for LINE in $( cat $TOOLS_HOME/etc/oratab | grep -v ^# | grep -v ^$ | awk '{ print $1 }' | sort ); do
+			if [ $( echo $LINE | awk -F: '{ print $1 }' ) = "*" ]; then
+				let ++DEFNR
+                        	printf " $(tput bold)%-16s$(tput sgr0) %-5s %-5s %-5s\n" $( echo "$( echo $LINE | awk -F: '{ print $1 }')$DEFNR" ) " " " " $( echo $LINE | awk -F: '{ print $2 }' )
+                        	alias -- $( echo "$( echo $LINE | awk -F: '{ print $1 }' )$DEFNR" )="export ORACLE_HOME=$( echo $LINE | awk -F: '{ print $2 }' ); export PATH=$( echo $LINE | awk -F: '{ print $2 }' )/bin:$PATH; unset ORACLE_SID"
+			else
+                        	printf " $(tput bold)%-16s$(tput sgr0) %-5s %-5s %-5s\n" $( echo $LINE | awk -F: '{ print $1 }' ) $( echo $LINE | awk -F: '{ print $3 }' ) $( [ $(ps -ef | grep -- $( echo $LINE | awk -F: '{ print $1 }' ) | egrep -c "pmon|smon|dbw|lgwr" ) -ge 4 ] && echo "Y" || echo "N" ) $( echo $LINE | awk -F: '{ print $2 }' )
+				if [ "$( echo $LINE | awk -F: '{ print substr($1,1,1) }' )" = "+" ]; then
+                        		alias -- $( echo $LINE | awk -F: '{ print $1 }' )="export ORACLE_SID=$( echo $LINE | awk -F: '{ print $1 }' ); export ORAENV_ASK=NO; . oraenv; export CDPATH=\".:\$( echo \$ORACLE_BASE/diag/asm/*/$( echo $LINE | awk -F: '{ print $1 }' ) ):\$( echo \$ORACLE_HOME )\""
+				else
+					INSTANCE_SID=$( get_instancename_from_dbname $( echo $LINE | awk -F: '{ print $1 }' ) )
+                        		alias -- $( echo $LINE | awk -F: '{ print $1 }' )="export ORACLE_SID=$( echo $LINE | awk -F: '{ print $1 }' ); export ORAENV_ASK=NO; . oraenv; export ORACLE_SID=$INSTANCE_SID; export CDPATH=\".:\$( echo \$ORACLE_BASE/diag/rdbms/*/$INSTANCE_SID ):\$( echo \$ORACLE_HOME ):\$( echo \$ORACLE_HOME/admin/$( echo $LINE | awk -F: '{ print $1 }' ) )\""
+				fi
+			fi
+			if [ "$( echo $LINE | awk -F: '{ print substr($1,1,1) }' )" = "+" ]; then
+				export ASMPATH=$( echo $LINE | awk -F: '{ print $2 }' )
+			fi
+                done
+		set +f
+                # handy aliases
+                alias sq="rsqlplus '/ as sysdba'"
+                alias sqa="rsqlplus '/ as sysasm'"
+		alias cstat="$ASMPATH/bin/crsctl status resource -t"
+		alias rsqlplus="rlwrap sqlplus"
+		alias rs="rlwrap sqlplus"
+		alias rr="rlwrap rman target /"
+		alias rd="rlwrap dgmgrl /"
+        fi
+        #
+        # Agent
+        #
+        if [ -f $TOOLS_HOME/etc/agenttab ]; then
+                printf "=Agent                  Isup  ORACLE_HOME\n"
+                for LINE in $( cat $TOOLS_HOME/etc/agenttab | grep -v ^# | grep -v ^$ | grep -v ^\* ); do
+                        export ORACLE_HOME=$( echo $LINE | awk -F: '{ print $2 }' )
+			if [ -z "$AGENT_URL" ]; then
+                        	$ORACLE_HOME/bin/emctl status agent > /dev/null 2>&1
+				RET=$?
+			else
+				if [ "$( wget --output-document - --no-check-certificate --quiet $AGENT_URL | grep EMAgent | sed 's/.*\(EMAgent is working\).*/\1/' )" = "EMAgent is working" ]; then
+					RET=0
+				else
+					RET=1
+				fi
+			fi
+                        [ $RET -gt 0 ] && ISUP="N" || ISUP="Y"
+                        printf " $(tput bold)%-22s$(tput sgr0) %-5s %-5s\n" $( echo $LINE | awk -F: '{ print $1 }' ) $ISUP $( echo $LINE | awk -F: '{ print $2 }' )
+                        alias $( echo $LINE | awk -F: '{ print $1 }' )="export ORACLE_SID=$( echo $LINE | awk -F: '{ print $1 }' ); export ORACLE_HOME=$ORACLE_HOME; export PATH=$ORACLE_HOME/bin:$PATH"
+                done
+        fi
+        #
+        # Application server(s)
+        #
+        if [ -f $TOOLS_HOME/etc/apptab ]; then
+		printf "=Application Servers          ORACLE_HOME\n"
+                for LINE in $( cat $TOOLS_HOME/etc/apptab | grep -v ^# | grep -v ^$ | grep -v ^\* ); do
+                        printf " $(tput bold)%-28s$(tput sgr0) %-5s\n" $( echo $LINE | awk -F: '{ print $1 }' ) $(echo $LINE | awk -F: '{ print $2 }' )
+                        export ORACLE_HOME=$( echo $LINE | awk -F: '{ print $2 }' )
+			$ORACLE_HOME/opmn/bin/opmnctl status | grep -v ^$ | sed 's/^/ /'
+                        alias $( echo $LINE | awk -F: '{ print $1 }' )="export ORACLE_SID=$( echo $LINE | awk -F: '{ print $1 }' ); export ORACLE_HOME=$ORACLE_HOME; export PATH=$ORACLE_HOME/bin:$ORACLE_HOME/opmn/bin:$PATH"
+                done
+        fi
+	#
+	# Set window title
+	PROMPT_COMMAND='echo -ne "\033]0;${USER}@${HOSTNAME}:${PWD} ORACLE_SID=${ORACLE_SID} ORACLE_HOME=${ORACLE_HOME}\007"'
+        #
+        # Global aliases
+        #
+        alias reprofile=". $TOOLS_HOME/bin/profile"
+	alias oh="cd \$ORACLE_HOME"
+        alias oraps="$TOOLS_HOME/bin/profile"
+	#
+	# restore ORACLE_HOME
+	export ORACLE_HOME=$OLD_ORACLE_HOME
+fi
+
+#!/bin/bash
+# enable shell tracing if first switch is '-x'.
+[ "$1" = "-x" ] && set -x && shift
+#
+# 18072010 Frits Hoogland
+# 21072010 Frits Hoogland Added stripping of tab chars (clusterware adds ^I^I# added by agent)
+# 08062011 Frits Hoogland Added xterm-color as terminal
+# 18092011 Frits Hoogland Rewrote sed script to awk because sed on solaris is behaving different
 #
 # Profile
 # This script lists the database instances in /etc/oratab
