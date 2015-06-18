@@ -1,7 +1,0 @@
-/u01/app/oracle/diag/asm/*/*/trace/*.trc /u01/app/oracle/diag/asm/*/*/trace/*.trm {
-    weekly
-    rotate 4
-    compress
-    missingok
-    nocreate
-}
