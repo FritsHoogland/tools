@@ -1,0 +1,12 @@
+#!/bin/bash
+# this is oracle_trace_remove
+AFTER_DAYS=6
+DIRS='
+/u01/app/oracle/diag/rdbms/*/*/trace
+/u01/app/oracle/diag/asm/*/*/trace
+'
+for DIR in $DIRS; do
+  if [ -d "$DIR" ]; then
+    /bin/find $DIR -name *tr[cm] -mtime +$AFTER_DAYS -exec ls {} \;
+  fi
+done

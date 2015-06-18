@@ -1,7 +1,12 @@
 #!/bin/bash
+# this is oracle_audit_tmpremove
 # 168 = 24 * 7; a week
 HOURS=168
-for DIR in /u01/app/*/grid/rdbms/audit; do
+DIRS='
+/u01/app/*/grid/rdbms/audit
+/u01/app/oracle/admin/*/adump
+'
+for DIR in $DIRS; do
   if [ -d "$DIR" ]; then
     /usr/sbin/tmpwatch -maf $HOURS "$DIR"
   fi
