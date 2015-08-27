@@ -17,6 +17,7 @@ select
 	a.sid||','||a.serial#||',@'||a.inst_id as sid_serial_inst,
 	d.spid as ospid,
 	a.username as username,
+	case a.sid when to_number(sys_context('USERENV', 'SID')) then '*' else ' ' end,
 	a.server as server,
 	a.program as program,
 -- case statements for the extra column
