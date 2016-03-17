@@ -11,6 +11,9 @@ set termout off
 col p1 new_value 1
 select null p1 from dual where 1=2;
 select nvl('&1','short') p1 from dual;
+col p2 new_value 2
+select null p2 from dual where 1=2;
+select nvl('&2','') p2 from dual;
 set termout on
 select
 -- things we always want
@@ -35,5 +38,8 @@ and a.paddr = d.addr
 and a.sid like case lower('&1') when 'ami' then sys_context('USERENV', 'SID') else '%' end
 and a.type like case when lower('&1') in ('short','long','active','sql') then 'USER' else '%' end
 and a.type like case lower('&1') when 'bg' then 'BACKGROUND' else '%' end
+and lower(nvl(a.program,'a')) like case lower('&1') when 'bg' then lower('%&2%') else '%' end
+and lower(nvl(a.username,'a')) like case when lower('&1') in ('short','long','active','sql') then lower('%&2%') else '%' end
 /
 undef 1
+undef 2
