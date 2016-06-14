@@ -2,6 +2,8 @@ rem fd.sql -- find in dictionary
 rem simple script to find dictionary tables 
 rem
 
+set verify off
+
 def dictionary_table=&1
 
 select table_name from dict where upper(table_name) like upper('%&&dictionary_table%')
@@ -12,4 +14,4 @@ select object_name from dba_objects where upper(object_name) like upper('CDB_%&&
 
 undefine dictionary_table
 
-
+set verify on
